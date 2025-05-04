@@ -17,7 +17,6 @@ Func Run7zip($cmd, $taille)
 		If $percentage > 0 And $percentage < 101 Then
 			UpdateStatusNoLog(Translate("Extracting ISO file on key") & " ( " & $percentage & "% )")
 		EndIf
-		;If @error Then ExitLoop
 		Sleep(500)
 		$line &= StdoutRead($foo)
 		If @error Then ExitLoop
@@ -73,9 +72,9 @@ Func InitializeFilesInISO($iso_to_list)
 EndFunc   ;==>InitializeFilesInISO
 
 ; Install Syslinux boot sectors
-Func InstallSyslinux($drive_letter,$version=3,$syslinux_menu_folder="")
+Func InstallSyslinux($version=4,$syslinux_menu_folder="")
 	Local $line="",$error="",$executable="syslinux.exe"
-	SendReport("Start-InstallSyslinux on " & $drive_letter &" (version "&$version&")")
+	SendReport("Start-InstallSyslinux on " & $usb_letter &" (version "&$version&" / Folder "&$syslinux_menu_folder&")")
 
 	; Installing Syslinux to custom directory, format has to be -d \HBCD for example
 	if $syslinux_menu_folder <> "" Then
@@ -84,13 +83,14 @@ Func InstallSyslinux($drive_letter,$version=3,$syslinux_menu_folder="")
 		$syslinux_menu_folder_arg=""
 	EndIf
 
-	if $version=4 Then
-		$executable="syslinux4.exe"
-	Else
-		$executable="syslinux.exe"
+	$executable="syslinux"&$version&".exe"
+
+	If Not FileExists(@ScriptDir & '\tools\'&$executable) Then
+		SendReport("End-InstallSyslinux : FATAL ERROR detected ("&$executable&" NOT FOUND)")
+		Return -1
 	EndIf
 
-	$cmd='"' & @ScriptDir & '\tools\'&$executable&'" -maf ' & $syslinux_menu_folder_arg & $drive_letter
+	$cmd='"' & @ScriptDir & '\tools\'&$executable&'" -maf ' & $syslinux_menu_folder_arg & $usb_letter
 	SendReport("IN-InstallSyslinux : executing command -> " &@CRLF& $cmd)
 	$output=_RunReadStd($cmd)
 	SendReport("Return code : "&$output[0]&@CRLF&"Output : "&$output[1]&@CRLF&"Error : "&$output[2])
@@ -117,7 +117,7 @@ Func InstallWindowsBootSectors($drive_letter)
 	; Add check for success
 	SendReport("End-InstallWindowsBootSectors")
 	Return 0
-EndFunc   ;==>InstallSyslinux
+EndFunc   ;==>InstallWindowsBootSectors
 
 
 Func Run7zip2($cmd, $taille)

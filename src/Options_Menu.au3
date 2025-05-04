@@ -17,10 +17,10 @@ Func GUI_Options_Menu()
 	GUICtrlSetResizing(-1, $GUI_DOCKWIDTH+$GUI_DOCKHEIGHT)
 	$tab_general = GUICtrlCreateTabItem(Translate("General"))
 	$logo = GUICtrlCreatePic(@ScriptDir & "\tools\img\logo.jpg", 32, 45, 344, 107)
-	$version = GUICtrlCreateLabel("LiLi : "&$software_version, 88, 196, 250, 25)
+	$version = GUICtrlCreateLabel(Translate("Current version")&" : "&GetDisplayVersion(), 88, 196, 250, 25)
 	GUICtrlSetFont($version, 14)
-	$compat_version = GUICtrlCreateLabel(Translate("Compatibility List")&" : "&IniRead($compatibility_ini, "Compatibility_List", "Version","none"), 88, 231, 250, 25)
-	GUICtrlSetFont($compat_version, 14)
+	$last_version_available = GUICtrlCreateLabel(Translate("Last version")&" : "&GetLastAvailableVersion(), 88, 231, 250, 25)
+	GUICtrlSetFont($last_version_available, 14)
 	$group_version = GUICtrlCreateGroup(Translate("Versions"), 56, 160, 307, 123)
 	GUICtrlCreateGroup("", -99, -99, 1, 1)
 	$donate = GUICtrlCreateButton(Translate("Make a donation"), 32, 319, 153, 33, $WS_GROUP)
@@ -36,8 +36,8 @@ Func GUI_Options_Menu()
 	$Group3 = GUICtrlCreateGroup(Translate("Install parameters"), 24, 48, 353, 160)
 
 	$automatic_recognition = GUICtrlCreateRadio(Translate("Use LiLi automatic recognition")&" ("&Translate("highly recommended")&")", 44, 72, 330, 17)
-	$force_default_mode = GUICtrlCreateRadio(Translate("Force using default mode (works with most Linuxes)"), 44, 104, 265, 17)
-	$force_install_parameters = GUICtrlCreateRadio(Translate("Force using same parameters as")&" :", 44, 136, 265, 17)
+	$force_default_mode = GUICtrlCreateRadio(Translate("Force using default mode (works with most Linuxes)"), 44, 104, 330, 17)
+	$force_install_parameters = GUICtrlCreateRadio(Translate("Force using same parameters as")&" :", 44, 136, 330, 17)
 	$combo_use_setting = GUICtrlCreateCombo("", 88, 168, 250, -1, BitOR($CBS_DROPDOWNLIST, $WS_VSCROLL))
 	GUICtrlSetData($combo_use_setting, ">> " & Translate("Select a Linux")&$prefetched_linux_list_full)
 	UpdateRecognition()
@@ -181,8 +181,18 @@ Func GUI_Options_Menu()
 					GUISetState(@SW_ENABLE, $CONTROL_GUI)
 					ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
 					GUISwitch($CONTROL_GUI)
+					SendReport("=========> File Set = "&$file_set)
+					if $file_set <> 0 Then
+						SendReport("=========> running detection again")
+						if $step2_display_menu=1 Then
+							GUI_Hide_Step2_Download_Menu()
+						EndIf
+						GUI_Show_Step2_Default_Menu()
+						Check_source_integrity($file_set)
+					EndIf
 					Return ""
 				EndIf
+
 			Case $ok_button
 				WriteAdvancedSettings()
 				if CheckCustomRecognition() Then
@@ -192,6 +202,15 @@ Func GUI_Options_Menu()
 					GUISetState(@SW_ENABLE, $CONTROL_GUI)
 					ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
 					GUISwitch($CONTROL_GUI)
+					SendReport("=========> File Set = "&$file_set)
+					if $file_set <> "0" Then
+						SendReport("=========> running detection again")
+						if $step2_display_menu=1 Then
+							GUI_Hide_Step2_Download_Menu()
+						EndIf
+						GUI_Show_Step2_Default_Menu()
+						Check_source_integrity($file_set)
+					EndIf
 					Return ""
 				EndIf
 			Case $contact
@@ -307,6 +326,7 @@ Func CheckCustomRecognition()
 		If StringInStr($forced_linux_selected, ">>") = 0 Then
 			WriteSetting("Install_Parameters","use_same_parameter_as",$forced_linux_selected)
 			UpdateRecognition()
+			$need_to_recheck=1
 			Return 1
 		Else
 			WriteSetting("Install_Parameters","use_same_parameter_as","")
@@ -417,7 +437,7 @@ Func InitUpdateTab()
 
 	Setting_To_Checkbox($check_for_updates,"Updates", "check_for_updates")
 
-	if (isBeta() OR ReadSetting( "Updates", "check_for_beta_versions") = "yes") Then
+	if (ReadSetting( "Updates", "check_for_beta_versions") = "yes") Then
 		GUICtrlSetState($all_release,$GUI_CHECKED)
 	Else
 		GUICtrlSetState($stable_only,$GUI_CHECKED)

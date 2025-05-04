@@ -4,21 +4,14 @@
 
 Func InitLog()
 	DirCreate($log_dir)
-	UpdateLog(LogSystemConfig())
-	;SendReport("logfile-" & $logfile)
+	$system_config = LogSystemConfig()
+	DeleteOldLogs("1-month")
+	SendReport($system_config)
 EndFunc   ;==>InitLog
 
 Func LogSystemConfig()
-	SendReport("Start-LogSystemConfig")
-	Local $space = -1
 
-	; Little fix for AutoIT 3.3.0.0
-	$os_version_long= RegRead("HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "ProductName")
-	if Not @error AND ( StringInStr($os_version_long,"Seven") OR StringInStr($os_version_long,"Windows 7")) Then
-		$os_version=$os_version_long
-	Else
-		$os_version=@OSVersion
-	EndIf
+	Local $space = -1
 
 	$mem = MemGetStats()
 	if IsArray($mem) AND Ubound($mem) > 2 Then
@@ -37,62 +30,77 @@ Func LogSystemConfig()
 		$line &= @CRLF & "Wine Detected : "&$realOS[1]
 	EndIf
 
-	$line &= @CRLF & "OS Type : " & @OSType
-	$line &= @CRLF & "OS Version : " & $os_version
-	$line &= @CRLF & "OS Build : " & @OSBuild
-	$line &= @CRLF & "OS Service Pack : " & @OSServicePack
-	$line &= @CRLF & "OS Lang :  " & HumanOSLang(@OSLang) & " ("& @OSLang&")"
-	$line &= @CRLF & "Language : " & HumanOSLang(@MUILang) & " ("& @MUILang&")"
+	$line &= @CRLF & "OS Version : " & OSName() &  " (OS Name : "&RegRead("HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "ProductName")&" - SP : "&@OSServicePack&" - Build "&@OSBuild&" - Type : "&@OSType&")"
+	$line &= @CRLF & "OS Language :  " & HumanOSLang(@OSLang) & " ("& @OSLang&")"
+	$line &= @CRLF & "User Language : " & HumanOSLang(@MUILang) & " ("& @MUILang&")"
+	$line &= @CRLF & "Keyboard : " & @KBLayout
 	$line &= @CRLF & "Font size : " & $font_size
 	$line &= @CRLF & "Architecture : " & @OSArch
 	$line &= @CRLF & "Memory : " & $mem_stats
 
-	$line &= @CRLF & "Keyboard : " & @KBLayout
+
 	$line &= @CRLF & "Resolution : " & @DesktopWidth & "x" & @DesktopHeight
 	$line &= @CRLF & "Proxy settings : " & ProxySettingsReport()
 
-	If StringStripWS($selected_drive,8)<>"->" Then
-		$line &= @CRLF & "Chosen Key : " & $selected_drive
-		$line &= @CRLF & "Filesystem : " & DriveGetFileSystem($selected_drive)
-		$line &= @CRLF & "Free space on key : " & Round(DriveSpaceFree($selected_drive)) & "MB"
+	If ReadSetting( "Updates", "check_for_updates") = "yes" Then
+		If ReadSetting( "Updates", "check_for_beta_versions") = "yes" Then
+			$updatetypes="Stable and Beta versions"
+		Else
+			$updatetypes="Stable versions only"
+		EndIf
+		$line &= @CRLF & "Check for updates : Enabled ("&$updatetypes&")"
+	Else
+		$line &= @CRLF & "Check for updates : Disabled"
+	EndIf
+
+	If StringInStr($usb_letter,"->") == 0 Then
+		$line &= @CRLF & "Selected partition : " & $usb_letter
+		$line &= @CRLF & "Filesystem : " & $usb_filesystem
+		If ReadSetting( "Advanced", "skip_partitiontable_reporting") = "no" Then
+			$line &= @CRLF & "Type of table : " & _WinAPI_GetDrivePartitionTableType($usb_letter)
+		EndIf
+		$line &= @CRLF & "Free space on key : " & Round($usb_space_free) & "MB"
 		$line &= @CRLF & "Previous install : "&PreviousInstallReport()
+	Else
+		$line &= @CRLF & "Selected partition : None"
 	EndIf
 
 	If $file_set_mode = "iso" Then
-		$line &= @CRLF & "Selected ISO : " &path_to_name($file_set)
-		$line &= @CRLF & "Recognized as : "&ReleaseGetDescription($release_number)&"("&ReleaseGetCodename($release_number)&")"
+		$line &= @CRLF & "Selected ISO : " &path_to_name($file_set)&" ("& HumanSize(FileGetSize($file_set))&")"
+		$line &= @CRLF & "Recognized as : "&$release_description&" ("&$release_codename&")"
+		$line &= @CRLF & "Using architecture : "&$release_arch&" (found : "&$release_detectedarch&")"
+		$line &= @CRLF & "Supported features : "&$release_supported_features
+		$line &= @CRLF & "Recognition method : "&$release_recognition_method
 		$line &= @CRLF & "ISO Hash : " & $MD5_ISO
+
 	Elseif $file_set_mode == "img" Then
 		$line &= @CRLF & "Selected source : " & $file_set
 		$line &= @CRLF & "Selected file : " &path_to_name($file_set)
 	EndIf
 	$line &= @CRLF & "Step Status : (STEP1=" & HumanStepCheck($STEP1_OK) & ") (STEP2=" & HumanStepCheck($STEP2_OK) & ") (STEP3=" & HumanStepCheck($STEP3_OK) & ") "
 	$line &= @CRLF & "------------------------------  End of system config  ------------------------------" & @CRLF
-	SendReport("End-LogSystemConfig")
 	Return $line
 EndFunc   ;==>LogSystemConfig
 
 Func PreviousInstallReport()
 	; Getting Portable VirtualBox infos
-	if FileExists($selected_drive&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini") Then
-		$vbox_report=" and Portable-VirtualBox pack "&IniRead($selected_drive&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","NotFound") _
-		& " ( "&IniRead($selected_drive&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","virtualbox_version","NotFound")&" )"
+	if FileExists($usb_letter&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini") Then
+		$vbox_report=" and Portable-VirtualBox pack "&IniRead($usb_letter&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","NotFound") _
+		& " ( "&IniRead($usb_letter&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","virtualbox_version","NotFound")&" )"
 	Else
 		$vbox_report=" and no Portable-VirtualBox installed"
 	EndIf
 
 	; Getting Live USB infos
-	if FileExists($selected_drive&"\"&$autoclean_settings) Then
-		$installed_linux=IniRead($selected_drive&"\"&$autoclean_settings,"General","Installed_Linux","NotFound")
-		$linux_codename=IniRead($selected_drive&"\"&$autoclean_settings,"General","Installed_Linux_Codename","NotFound")
-		$install_size=GetPreviousInstallSizeMB($selected_drive)
+	if FileExists($usb_letter&"\"&$autoclean_settings) Then
+		$installed_linux=IniRead($usb_letter&"\"&$autoclean_settings,"General","Installed_Linux","NotFound")
+		$linux_codename=IniRead($usb_letter&"\"&$autoclean_settings,"General","Installed_Linux_Codename","NotFound")
+		$install_size=GetPreviousInstallSizeMB($usb_letter)
 		Return $installed_linux&" ("&$linux_codename&") using "&$install_size&"MB"&$vbox_report
 	Else
 		Return "No previous install found on key"&$vbox_report
 	EndIf
 EndFunc
-
-
 
 Func ProxySettingsReport()
 	; Apply proxy settings
@@ -146,9 +154,54 @@ Func UpdateStatusNoLog($status)
 EndFunc   ;==>UpdateStatusNoLog
 
 Func SendReport($report)
-	If $verbose_logging = "yes" Then UpdateLog($report)
+	UpdateLog($report)
 	_SendData($report, "lili-Reporter")
 EndFunc   ;==>SendReport
+
+Func SendReportNoLog($report)
+	_SendData($report, "lili-Reporter")
+EndFunc
+
+Func DebugTimer($function_name)
+	SendReport($function_name&" - "&Round(TimerDiff($DEBUG_TIMER))&"ms")
+	$DEBUG_TIMER=TimerInit()
+EndFunc
+
+
+Func DeleteOldLogs($retention)
+	$retention_date = ConvertRetentionToNumber($retention)
+	$search = FileFindFirstFile($log_dir & "*.log")
+
+	If $search = -1 Then
+		Return 0
+	EndIf
+	$deleted_logs=0
+	While 1
+		$file = FileFindNextFile($search)
+		If @error Then ExitLoop
+		$t = FileGetTime($log_dir & $file)
+		$diff = _DateDiff('D', $retention_date, $t[0] & "/" & $t[1] & "/" & $t[2])
+		If $diff < 0 Then
+			FileDelete($log_dir & $file)
+			$deleted_logs +=1
+		EndIf
+	WEnd
+	FileClose($search)
+EndFunc   ;==>DeleteOldLogs
+
+Func ConvertRetentionToNumber($retention)
+	$retention_split = StringSplit($retention, "-", 3)
+	If $retention_split[1] = "year" Or $retention_split[1] = "years" Then
+		$retention_date = _DateAdd('Y', -$retention_split[0], _NowCalcDate())
+	ElseIf $retention_split[1] = "month" Or $retention_split[1] = "month" Then
+		$retention_date = _DateAdd('M', -$retention_split[0], _NowCalcDate())
+	ElseIf $retention_split[1] = "weeks" Or $retention_split[1] = "week" Then
+		$retention_date = _DateAdd('w', -$retention_split[0], _NowCalcDate())
+	Else
+		$retention_date = _DateAdd('D', -$retention_split[0], _NowCalcDate())
+	EndIf
+	Return $retention_date
+EndFunc   ;==>ConvertRetentionToNumber
 
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////// Checking steps states                      ///////////////////////////////////////////////////////////////////////////////

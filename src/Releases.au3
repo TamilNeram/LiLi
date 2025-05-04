@@ -9,6 +9,7 @@ Global Const $R_CODE = 0,$R_NAME=1,$R_DISTRIBUTION=2, $R_DISTRIBUTION_VERSION=3,
 Global Const $R_MIRROR1=12,$R_MIRROR2=13,$R_MIRROR3=14,$R_MIRROR4=15,$R_MIRROR5=16,$R_MIRROR6=17,$R_MIRROR7=18,$R_MIRROR8=19,$R_MIRROR9=20,$R_MIRROR10=21,$R_VARIANT=22,$R_VARIANT_VERSION=23,$R_VISIBLE=24,$R_FEATURES=25
 Global $releases[5][30],$compatible_md5[5],$compatible_filename[5],$codenames_list[5]
 Global $current_compatibility_list_version
+Global $sections
 
 Func Get_Compatibility_List()
 	SendReport("Start-Get_Compatibility_List")
@@ -124,9 +125,8 @@ Func DisplayRelease($release_in_list)
 EndFunc
 
 Func Print_For_ComboBox()
-	Global $releases
+	Global $releases,$sections
 	Local $temp=""
-	$sections = IniReadSectionNames($compatibility_ini)
 	For $release_in_list=1 to $sections[0]
 		if $releases[$release_in_list][$R_VISIBLE]="yes" Then $temp &=  ReleaseGetDescription($release_in_list)&"|"
 			;& "// Size : " & $releases[$release_in_list][$R_DOWNLOAD_SIZE] _
@@ -136,9 +136,8 @@ Func Print_For_ComboBox()
 EndFunc
 
 Func Print_For_ComboBox_Full()
-	Global $releases
+	Global $releases,$sections
 	Local $temp=""
-	$sections = IniReadSectionNames($compatibility_ini)
 	For $release_in_list=1 to $sections[0]
 		$temp &=  ReleaseGetDescription($release_in_list)&"|"
 			;& "// Size : " & $releases[$release_in_list][$R_DOWNLOAD_SIZE] _
@@ -148,10 +147,9 @@ Func Print_For_ComboBox_Full()
 EndFunc
 
 Func FindReleaseFromDescription($description)
-	Global $releases
+	Global $releases,$sections
 	Local $found=-1
 	If StringInStr($description,"Regular Linux") Then Return FindReleaseFromCodeName("default")
-	$sections = IniReadSectionNames($compatibility_ini)
 	For $i=1 to $sections[0]
 		If ReleaseGetDescription($i) = $description Then $found = $i
 	Next
@@ -159,30 +157,27 @@ Func FindReleaseFromDescription($description)
 EndFunc
 
 Func FindReleaseFromMD5($MD5_to_find)
-	Global $releases
+	Global $releases,$sections
 	Local $found=-1
-	$sections = IniReadSectionNames($compatibility_ini)
 	For $i=1 to $sections[0]
-		If ReleaseGetMD5($i) = $MD5_to_find Then $found = $i
+		If StringInStr(ReleaseGetMD5($i),$MD5_to_find,2)>0 Then $found = $i
 	Next
 	Return $found
 EndFunc
 
 Func FindReleaseFromFileName($filename_to_find)
-	Global $releases
+	Global $releases,$sections
 	Local $found=-1
-	$sections = IniReadSectionNames($compatibility_ini)
 	For $i=1 to $sections[0]
-		If ReleaseGetFilename($i) = $filename_to_find Then $found = $i
+		If StringInStr(ReleaseGetFilename($i),$filename_to_find,2)>0  Then $found = $i
 	Next
 	Return $found
 EndFunc
 
 Func FindReleaseFromCodeName($codename_to_find)
-	Global $releases
+	Global $releases,$sections
 	Local $found=-1
 	SendReport("FindReleaseFromCodeName : Tring to find "&$codename_to_find)
-	$sections = IniReadSectionNames($compatibility_ini)
 	For $i=1 to $sections[0]
 		If $sections[$i] = $codename_to_find Then $found = $i
 	Next
@@ -194,7 +189,7 @@ Func FindReleaseFromCodeName($codename_to_find)
 EndFunc
 
 Func DisplayAllReleases()
-	$sections = IniReadSectionNames($compatibility_ini)
+	Global $sections
 	For $i=1 to $sections[0]
 		DisplayRelease($i)
 	Next
@@ -203,6 +198,11 @@ EndFunc
 Func ReleaseGetCodename($release_in_list)
 	if $release_in_list <=0 Then Return "default"
 	Return StringStripWS($releases[$release_in_list][$R_CODE],3)
+EndFunc
+
+Func ReleaseGetName($release_in_list)
+	if $release_in_list <=0 Then Return "NotFound"
+	Return StringStripWS($releases[$release_in_list][$R_NAME],3)
 EndFunc
 
 Func ReleaseGetFilename($release_in_list)
@@ -248,9 +248,10 @@ EndFunc
 Func ReleaseGetMirror($release_in_list,$mirror_number=0)
 	if $release_in_list <=0 Then Return "NotFound"
 	if StringInStr($releases[$release_in_list][$R_MIRROR1],"::") Then
-		$split=StringSplit($releases[$release_in_list][$R_MIRROR1],"::",2)
+		$split=StringSplit($releases[$release_in_list][$R_MIRROR1],"::",3)
 		if Ubound($split)==2 Then
-			Return IniRead(@ScriptDir&"\tools\settings\common_mirrors.ini",$split[0],"Mirrors","")
+			$common_mirror_path = IniRead($common_mirrors_ini,$split[0],"Mirror"&($mirror_number+1),"")
+			Return StringStripWS($common_mirror_path&$split[1],3)
 		Else
 			Return ""
 		EndIf
@@ -259,15 +260,34 @@ Func ReleaseGetMirror($release_in_list,$mirror_number=0)
 	EndIf
 EndFunc
 
+Func ReleaseGetMirrors($release_in_list)
+	if $release_in_list <=0 Then Return "NotFound"
+	$all_mirrors=""
+	For $i = 0 To 9
+		$all_mirrors &= ReleaseGetMirror($release_in_list,$i)&"##"
+	Next
+	Return StringSplit(StringTrimRight($all_mirrors,2),"##",1)
+EndFunc
+
 Func ReleaseGetMirrorStatus($release_in_list)
 	if $release_in_list <=0 Then Return 0
 	$available_mirrors=0
-	For $i=$R_MIRROR1 To $R_MIRROR10
-		if StringStripWS($releases[$release_in_list][$i],3) <> "" Then
+	For $m = 0 To 9
+		if  ReleaseGetMirror($release_in_list,$m) <> "" Then
 			$available_mirrors+=1
 		EndIf
 	Next
 	Return $available_mirrors
+EndFunc
+
+Func ReleaseGetReleaseDate($release_in_list)
+	if $release_in_list <=0 Then Return "NotFound"
+	Return StringStripWS($releases[$release_in_list][$R_RELEASE_DATE],3)
+EndFunc
+
+Func ReleaseGetDownloadSize($release_in_list)
+	if $release_in_list <=0 Then Return 800
+	Return StringStripWS($releases[$release_in_list][$R_DOWNLOAD_SIZE],3)
 EndFunc
 
 Func ReleaseGetInstallSize($release_in_list)
@@ -284,12 +304,63 @@ Func ReleaseGetDescription($release_in_list)
 		; This is Linux description
 		Return Translate(StringStripWS($releases[$release_in_list][$R_DESCRIPTION],3))
 	Endif
-
 EndFunc
 
 Func ReleaseGetSupportedFeatures($release_in_list)
 	if $release_in_list <=0 Then Return "NotFound"
 	Return StringStripWS($releases[$release_in_list][$R_FEATURES],3)
+EndFunc
+
+
+Func ReleaseInitializeVariables($release_in_list)
+	if $release_in_list <=0 Then Return "NotFound"
+	Global $release_arch = AutoDetectArchitecture($file_set)
+	if ($release_arch = "64-bit") Then
+		$append_to_description=" (64-bit)"
+	Else
+		$append_to_description=""
+	EndIf
+
+	Global $release_number=$release_in_list
+	Global $release_codename=ReleaseGetCodename($release_number)
+	Global $release_name=ReleaseGetDescription($release_number)
+	Global $release_distribution=ReleaseGetDistribution($release_number)
+	Global $release_distribution_version=ReleaseGetDistributionVersion($release_number)
+	Global $release_variant=ReleaseGetVariant($release_number)
+	Global $release_variant_version=ReleaseGetVariant($release_number)
+	Global $release_supported_features=ReleaseGetSupportedFeatures($release_number)
+	Global $release_filename=ReleaseGetFilename($release_number)
+	Global $release_file_md5=ReleaseGetMD5($release_number)
+	Global $release_release_date=ReleaseGetReleaseDate($release_number)
+	Global $release_web=ReleaseGetWebsite($release_number)
+	Global $release_download_page=ReleaseGetDownloadPage($release_number)
+	Global $release_download_size=ReleaseGetDownloadSize($release_number)
+	Global $release_install_size=ReleaseGetInstallSize($release_number)
+	Global $release_description=ReleaseGetDescription($release_number)&$append_to_description
+	Global $release_mirrors=ReleaseGetMirrors($release_number)
+	Global $release_mirrors_status=ReleaseGetMirrorStatus($release_number)
+EndFunc
+
+Func ReleaseHasFeature($feature_to_check)
+	if StringInStr($release_supported_features,$feature_to_check,0) <> 0 Then
+		Return True
+	Else
+		Return False
+	EndIf
+EndFunc
+
+; Get value for a feature such as copy-module:value
+; if same option specified multiple times, returns a string with format value1|value2|value3
+Func ReleaseGetFeatureValue($feature_to_check)
+	$feature_value=""
+	$features_array=StringSplit($release_supported_features,",",2)
+	FOR $feature IN $features_array
+		if StringInStr($feature,$feature_to_check&":")<>0 Then
+			$feature_value &= StringReplace($feature,"keep-module:","")&"|"
+		EndIf
+	Next
+	If StringRight($feature_value,1) == "|" Then $feature_value=StringTrimRight($feature_value,1)
+	Return $feature_value
 EndFunc
 
 Func ReleaseGetVBoxRAM($release_in_list)
@@ -301,8 +372,47 @@ Func ReleaseGetVBoxRAM($release_in_list)
 			if IsArray($vboxram) AND $vboxram[0]=2 Then Return $vboxram[2]
 		EndIf
 	Next
+	Return "384"
+EndFunc
+
+Func ReleaseGetVBoxOSType($release_in_list)
+	$features=ReleaseGetSupportedFeatures($release_in_list)
+	$feature_list = StringSplit($features,",")
+	For $feature IN $feature_list
+		if StringInStr($feature,"vboxostype-") Then
+			$vboxostype=StringSplit($feature,"-")
+			if IsArray($vboxostype) AND $vboxostype[0]=2 Then Return $vboxostype[2]
+		EndIf
+	Next
 	Return "256"
 EndFunc
+
+Func ReleaseGetVBoxStorageController($release_in_list)
+	$features=ReleaseGetSupportedFeatures($release_in_list)
+	if StringInStr($features,"vboxdisk-piix4") Then
+		Return "PIIX4"
+	Elseif StringInStr($features,"vboxdisk-ich6") Then
+		Return "ICH6"
+	Elseif StringInStr($features,"vboxdisk-piix3") Then
+		Return "PIIX3"
+	Elseif StringInStr($features,"vboxdisk-ide") Then
+		Return "PIIX4"
+	Elseif StringInStr($features,"vboxdisk-lsilogicsas") Then
+		Return "LsiLogicSas"
+	Elseif StringInStr($features,"vboxdisk-sas") Then
+		Return "LsiLogicSas"
+	Elseif StringInStr($features,"vboxdisk-ahci") Then
+		Return "AHCI"
+	Elseif StringInStr($features,"vboxdisk-sata") Then
+		Return "AHCI"
+	Elseif StringInStr($features,"vboxdisk-buslogic") Then
+		Return "BusLogic"
+	Else
+		; Default value is SCSI (LsiLogic)
+		Return "LsiLogic"
+	EndIf
+EndFunc
+
 
 Func URLToHostname($url)
 	if StringInStr($url,"/") >= 3 Then

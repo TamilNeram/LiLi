@@ -2,26 +2,10 @@
 ; ///////////////////////////////// Graphical Part                                ///////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#cs  Useless in AutoIT 3.3.6.1 ?
-; Global variables for Graphical Part
-Global Const $LWA_ALPHA = 0x2
-Global Const $LWA_COLORKEY = 0x1
-Global Const $WM_LBUTTONDOWN = 0x0201
-#ce
-
-
-Func GetVertOffset($hgui)
-;Const $SM_CYCAPTION = 4
-    Const $SM_CXFIXEDFRAME = 7
-    Local $wtitle, $wclient, $wsize,$wside,$ans,$AC_SRC_ALPHA = 1
-    ;$wclient = WinGetClientSize($hgui)
-    ;$wsize = WinGetPos($hgui)
-    $wtitle = DllCall('user32.dll', 'int', 'GetSystemMetrics', 'int', $SM_CYCAPTION)
-    $wside = DllCall('user32.dll', 'int', 'GetSystemMetrics', 'int', $SM_CXFIXEDFRAME)
-    ;$ans = $wsize[3] - $wclient[1] - $wtitle[0] - 2 * $wside[0] +25
-	$ans = $wtitle[0] + $wside[0]
-    Return $ans
-EndFunc  ;==>GetVertOffset
+; For Drag and Drop
+;Global Const $WM_DROPFILES = 0x233
+Global $gaDropFiles[1]
+Global $ghGDIPdll
 
 Func WM_NCHITTEST($hWnd, $iMsg, $iwParam, $ilParam)
 	If ($hWnd = $GUI) And ($iMsg = $WM_NCHITTEST) Then
@@ -157,7 +141,6 @@ EndFunc   ;==>_WinAPI_GetLayeredWindowAttributes
 	Remarks: Theres an example from Line 22 to line 112 ( between the first #Region - #Endregion Tags
 
 #ce ----------------------------------------------------------------------------
-
 
 Global $_Progress_ahCallBack[3] = [-1, -1, 0], $_Progress_Bars[1][15] = [[-1]], $iPercent = 0;
 
