@@ -1,0 +1,528 @@
+/* Copyright (C) 2007 - 2010 YOOtheme GmbH, YOOtheme Proprietary Use License (http://www.yootheme.com/license) */
+
+/*
+ * This CSS file is for customization purpose only
+ */ 
+
+#logo a.logo-icon {
+	display: block;
+	width: 250px;
+	height: 75px;
+	background: url(../../../images/yootheme/logo.png) 0 0 no-repeat;
+}
+
+.wrapper-glass #logo a.logo-icon { background-image: url(../../../images/yootheme/logo_glass.png); }
+.wrapper-black #logo a.logo-icon { background-image: url(../../../images/yootheme/logo_black.png); }
+.wrapper-wood #logo a.logo-icon { background-image: url(../../../images/yootheme/logo_wood.png); }
+
+/* first menu tab on menuright position */
+#menu .right .last .level1,
+/*#menu .right .last .level1 span.bg { background: url(../images/menu_level1_item_green.png) 0 0 no-repeat; }*/
+/*#menu .right .last .level1 span.bg { background: url(../images/menu_level1_item_blue.png) 0 0 no-repeat; }*/
+#menu .right .last .level1 span.bg { background: url(../images/menu_level1_item_violet.png) 0 0 no-repeat; }
+#menu .right .last a.level1 span.bg,
+#menu .right .last span.level1 span.bg {
+	color: #ffffff;
+	text-shadow: 0 -1px 1px rgba(0,0,0,0.4);
+	background-position: 100% -60px;
+}
+
+#menu .right li.last.level1:hover .level1,
+#menu .right li.last.level1.remain .level1,
+#menu .right li.last.level1.active .level1 { background-position: 0 -120px; }
+
+#menu .right li.last.level1:hover .level1 span.bg,
+#menu .right li.last.level1.remain .level1 span.bg,
+#menu .right li.last.level1.active .level1 span.bg { background-position: 100% -180px; }
+
+/* demo content */
+.iconbox { 
+	padding: 10px;
+	border: 1px solid #dcdcdc;
+	background: #ffffff;
+	overflow:hidden; 
+}
+
+/* LiLi's Mods */
+
+/* Screenshots */
+	 img.screenshots{
+		background: white;
+		border: 1px solid #BBB;
+		padding: 5px;
+		width: 150px;
+		height: 150px;
+	}
+	
+/* ---------- gallery styles start here ----------------------- */
+	.gallery {
+		list-style: none;
+		margin-left: 100px;
+		padding: 0;
+	}
+	.gallery li {
+		margin: 15px 10px;
+		padding: 0 12px;
+		float: left;
+		position: relative;
+		width: 180px;
+		height: 130px;
+		background: url(../images/lili/gallery/drop-shadow.png) no-repeat center bottom;
+	}
+	.gallery img {
+		background: #fff;
+		border: solid 1px #ccc;
+	}
+	.gallery a.fancy-slideshow:hover img {
+		border: solid 1px black;
+	}
+
+	.gallery a {
+		text-decoration: none;
+	}
+	
+
+
+/* Typography */
+
+.exclusive {
+	color: red;
+	vertical-align:super;
+	font-size: 9px;
+}
+
+.lili_alert {
+	background: url(../images/lili/icon16/alert.gif) center no-repeat;	
+	background-color: #FFF6BF; 
+	background-position: 15px 50%;	
+	text-align: left; 
+	padding: 5px 20px 5px 45px;	
+	color:#996666;	
+	border-top: 2px solid #ffd324 ;	
+	border-bottom: 2px solid #ffd324;
+}
+
+.lili_warning {
+	background: url(../images/lili/icon16/warning.gif) center no-repeat; 	
+	background-color: #FBEEF1; 
+	background-position: 15px 50%; 
+	text-align: left;	
+	padding: 5px 20px 5px 45px; 
+	color:#8E6A64; 	
+	border-top: 2px solid #FEABB9 ; 	
+	border-bottom: 2px solid #FEABB9;
+}
+
+.lili_info {
+	background: url(../images/lili/icon16/info.gif) center no-repeat; 
+	background-color:#F8FAFC ; 
+	background-position: 15px 50%; 
+	text-align: left; 	
+	padding: 5px 20px 5px 45px; 
+	color:#5E6273; 
+	border-top: 2px solid #B5D4FE ; 
+	border-bottom: 2px solid #B5D4FE;
+}
+
+.lili_code {
+	background: #F0F0F0 url(../images/lili/icon16/_no-image.gif) 10px 5px no-repeat; 
+	padding:5px 20px 5px 10px; 
+	font-family: Courier New, Courier, mono,times new roman;
+	line-height:150%;	
+	border-left: 5px solid #C3D7EA;	 
+	color:#666666;
+}
+
+.lili_download {
+	background: url(../images/lili/icon16/download.gif) center no-repeat; 	
+	background-color: #F0F0F0;	
+	background-position: 15px 50%; 
+	text-align: left; 
+	padding: 5px 20px 5px 45px; 
+	color:#666666; 
+	border-top: 2px solid #c0c0c0 ; 
+	border-bottom: 2px solid #c0c0c0;
+}
+
+/* Link Style */
+
+    a.plain, #yoo-zoo .items p.pos-links a {
+       background: #7FD4FF; /*#c3e263;*/
+	   color: #555;
+	   position: relative;
+	   border-radius: 4px;
+        -moz-border-radius: 4px;
+        -khtml-border-radius: 4px;
+        -webkit-border-radius: 4px;
+
+        padding: 1px 4px;
+        font-weight: bold;
+		white-space: nowrap;
+    }
+    
+    a.plain:hover, #yoo-zoo .items p.pos-links a:hover {
+	 	background:  #9E3763;/*#333333*/
+		color:white;
+		position: relative;
+        -moz-border-radius: 4px;
+        -khtml-border-radius: 4px;
+        -webkit-border-radius: 4px;
+        border-radius: 4px;
+
+        margin: -4px 0px -4px 0px;
+        padding: 1px 4px;
+        text-decoration: none;
+		white-space: nowrap;
+    }
+	
+	a.ext {
+		background:url(../images/lili/typography/external-links.gif) 99% 40% no-repeat; 
+		padding-right: 15px;	
+	}
+	
+/* Download button */
+	.dl-link {
+		display:block;
+		width: 273px; 
+		height: 95px;
+	}
+	
+	.dl-link:hover .dl-button {
+		background-position: 0px -95px; 
+	}
+	
+	.dl-link:hover .dl-title {
+		color: #000;
+		text-shadow: white 0px 1px 2px;
+	}
+
+	.dl-link:hover .dl-detail {
+	   background: black;
+	   color: white;
+	}		
+	
+	.dl-button {
+		background: url(../../../images/stories/main_pages/downloads/download_08.png) left top no-repeat; 
+		width: 273px; 
+		height: 95px; 
+		margin: 0px; 
+		padding: 0px;
+	}
+	
+	.dl-title {
+		color: #FFFFFF;
+		font-family: CartoGothicStd-Book, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+		font-size: 25px;
+		text-shadow: black 0px 1px 2px;
+		display: block;
+		margin-bottom: 10px;
+		margin-top: 12px;
+	}
+	
+    .dl-detail {
+		font-size: 10px;
+	   background: white;
+	   color: black;
+	   opacity: 0.85;
+	   position: relative;
+	   border-radius: 4px;
+        -moz-border-radius: 4px;
+        -khtml-border-radius: 4px;
+        -webkit-border-radius: 4px;
+        padding: 3px;
+		white-space: nowrap;
+		margin-right:8px;
+    }
+	
+	
+	
+	
+
+/* Download  popup */
+	#downloadPopup {
+		margin:0px;
+		padding: 0px;
+		background-image: url(../images/lili/popup/downloadPopup-bg.png);
+		background-repeat: no-repeat;
+		display: none;
+		width: 229px;
+		height: 113px;
+		position:absolute;
+		top:-95px;
+		left:-25px;
+		opacity: 0;
+		padding-top: 8px;
+	}
+		
+	#downloadPopup dt {
+		margin: 0px;
+		padding: 0px;
+		text-shadow: 0px 1px white;
+		margin: 8px 0px 0px 10px;
+		text-align: left;
+		width: 60px;
+		display: inline-block;
+		color: #748a9e;
+		font-size: 12px;
+		font-weight: bold;
+		font-family: "Lucida Grande", Verdana, Arial, sans-serif;
+		vertical-align: top;
+	}
+			
+	#downloadPopup dd {
+		padding: 0px;
+		margin: 8px 0px 0px 10px;
+		text-shadow: 0px 1px white;
+		width: 147px;
+		float: none;
+		display: inline-block;
+		color: #293b43;
+		font-family: "Lucida Grande", Verdana, Arial, sans-serif;
+		font-size: 12px;
+	}
+	#downloadPopup dl {
+		padding: 0px;
+		margin: -3px 0px 0px 0px;
+	}
+	
+/* Features layout */
+.one-third {
+	width: 33%;
+	text-align: center;
+}
+.two-thirds {
+	width: 66%;
+}
+
+.half {
+	width: 49%;
+}
+
+.lefty {
+	float: left;
+}
+.righty {
+	float: right;
+}
+
+/* Hiding Author + skinning bottom Zoo News module */
+.zoo-item.list-v {
+	padding-left: 90px;
+	background: url(../images/lili/modules/zoo_news.png) no-repeat left top;
+}
+
+.zoo-item.list-v p.meta {
+	display: none;
+	height:0px;
+}
+
+/* Reducing top and bottom margin on bottom modules */
+#bottom div.mod-separator {
+margin-top: 7px;
+}
+
+div.inner-wrapper-3 {
+	padding: 0 0 5px 0;
+	background: #F8F9FA;
+}
+
+/* No Spacer before first element of top menu if no date displayed */
+#toolbar .menu li a.first{ background: none; }
+
+/* JoomFish language selector */
+div#jflanguageselection {
+	/*background:url(../images/lili/modules/language_box.png) no-repeat 0px 0px;*/
+	padding-top: 4px;
+	padding-bottom: 4px;
+	display: inline;
+	float: right;
+	margin-right:20px;
+	background: #999;
+	-moz-box-shadow: rgba(0, 0, 0, 0.0976563) 0px 3px 3px, rgba(255, 255, 255, 0.199219) 0px 1px 0px inset;
+	-webkit-box-shadow: rgba(0, 0, 0, 0.0976563) 0px 3px 3px, rgba(255, 255, 255, 0.199219) 0px 1px 0px inset;
+	box-shadow: rgba(0, 0, 0, 0.0976563) 0px 5px 5px, rgba(255, 255, 255, 0.199219) 0px 1px 0px inset;
+
+border: 1px solid #20222B;
+
+        -moz-border-radius: 4px;
+        -webkit-border-radius: 4px;
+        border-radius: 4px 4px 4px 4px;
+		        border-radius: 4px;
+}
+
+div#jflanguageselection .rawimages span {
+	margin-left: 4px;
+	margin-right: 4px;
+}
+
+/* Fancy CSS for CKForm Contact Form */
+/*
+	#ckform1{
+		margin:1em 0;
+		padding-top:10px;
+		}
+	#ckform1 fieldset{
+		margin:0;
+		padding-top:.5em;
+		border:none;	
+		border-top:1px solid #f1f1f1;
+		}		
+	#ckform1 legend{
+		background:#fff;
+		padding:0 5px;
+		font-style:italic;
+		}	
+	#ckform1 p{
+		clear:both;
+		margin:.5em 0;
+		overflow:hidden;
+		}	
+	#ckform1 label{
+		float:left;
+		width:60px;
+		display:block;
+		text-align:right;
+		margin-right:10px;
+		}	
+	#ckform1 input, #ckform1 textarea{	
+		margin:0;	
+		width:250px;
+		border:1px solid #ddd;		
+		padding:3px 5px 3px 25px;
+		}		
+	
+	*/
+	#ckform1 input.name{background:#fff url(../images/lili/form/form_name.gif) no-repeat 5px 50%;padding-left:25px;}
+	#ckform1 input.email{background:#fff url(../images/lili/form/form_email.gif) no-repeat 5px 50%;padding-left:25px;}
+	#ckform1 input.web{background:#fff url(../images/lili/form/form_url.gif) no-repeat 5px 50%;padding-left:25px;}
+	#ckform1 input.subject{background:#fff url(../images/lili/form/form_subject.png) no-repeat 5px 50%;padding-left:25px;}
+	#ckform1 textarea.message{background:#fff url(../images/lili/form/form_note.gif) no-repeat 5px 6px;padding-left:25px;}
+	p.ck_mandatory {display:none;height:0px;width:0px;}
+	/*
+	#ckform1 textarea{
+		height:125px;
+		overflow:auto;
+		}					
+	#ckform1 p.submit{
+		clear:both;
+		margin:1em 0;
+		padding:.5em 70px;
+		border-top:1px solid #f1f1f1;		
+		
+		}	*/
+	#ckform1 #submit_bt{
+		height:28px;
+		line-height:28px;		
+		border-top:1px solid #999;
+		border-left:1px solid #999;
+		border-right:1px solid #333;
+		border-bottom:1px solid #333;
+		background:url(../images/lili/form/form_button.gif) no-repeat;
+		padding:0 10px 0 25px;
+		color:#333;
+		cursor:pointer;
+		text-align:left;
+		font-size:11px;
+		font-weight:bold;
+		}
+		
+/* List styles */
+	
+ul.tick  li {
+	background: url(../images/lili/typography/tick.png) no-repeat 0px 4px;
+	list-style-type: none;
+	margin: 3px 0px 0px 0px;
+	padding: 2px 0px 2px 30px;
+}
+
+ul.tick-blue  li {
+	background: url(../images/lili/typography/tick-blue.png) no-repeat 0px 4px;
+	list-style-type: none;
+	margin: 3px 0px 0px 0px;
+	padding: 2px 0px 2px 30px;
+}
+
+/* links style */
+ul.mini-arrow {
+	margin: -5px 0px 20px 0px;
+	padding-left: 0px;
+	list-style: none;
+}
+
+ul.mini-arrow li {
+	padding-left: 15px;
+	height: 30px;
+	line-height: 30px;
+	background: url(../images/typography/list_links.png) 0px 0 no-repeat;
+	cursor: pointer;
+}
+
+table.contenttoc {	display: none;}
+
+/* zoo */
+
+#yoo-zoo .items h1.pos-title ,#yoo-zoo .item  h1.pos-title {
+	line-height: 27px;
+	clear: right;
+}
+
+#yoo-zoo .items h2.pos-subtitle, #yoo-zoo .item h2.pos-subtitle  {
+	font-size: 12px;
+	margin: -17px 0px 12px 60px;
+}
+
+#banner {
+	left: -160px;	
+}
+
+/* adding a hidden dash to title to have better google site links
+warp/menu/default.php (104) : if (!strpos($_SERVER[‘HTTP_USER_AGENT’],"Googlebot"))  $span->createElement('span', trim($subline[1]), array('class'=>'subtitle') );  */
+
+#menu span.separator-title {
+	width: 0px;
+	height:0px;
+	margin: 0px;
+	padding: 0px;
+	display: none;
+}
+
+/* For List Menu in supported Linux*/
+/*
+.lm-wrapper { margin:0; padding:0; }
+.lm-wrapper .lm-letters { overflow:hidden; }
+* html .lm-wrapper .lm-letters { zoom:1; } /* for IE6 so that menu appears under letters 
+.lm-wrapper .lm-letters a { font-size:0.9em; display:block; float:left; padding:2px 11px; border:1px solid silver; border-right:none; text-decoration:none; }
+.lm-wrapper .lm-letters a:hover,
+.lm-wrapper .lm-letters a.lm-selected { background-color:#eaeaea; }
+.lm-wrapper .lm-letters a.lm-disabled { color:#ccc; }
+.lm-wrapper .lm-letters a.lm-last { border-right:1px solid silver; }
+.lm-wrapper .lm-letter-count {text-align:center; font-size:0.8em; line-height:1; margin-bottom:3px; color:#336699; }
+
+.lm-wrapper .lm-menu { border:1px solid silver; border-top:1px solid silver; padding:15px; z-index:10; position:absolute; margin-top:-1px; background:#ffc; display:none; }
+.lm-wrapper .lm-menu ul li { list-style-type:none; margin-bottom:5px; font-size:0.9em }
+.lm-wrapper .lm-menu ol li { margin-left:15px; }
+.lm-wrapper .lm-menu .lm-no-match { color:green; }
+.lm-wrapper .lm-menu a { text-decoration:none; }
+.lm-wrapper .lm-menu a:hover { text-decoration:underline; }
+.lm-wrapper .lm-menu .lm-submenu { overflow:hidden; }
+
+
+#compat-list-menu .lm-menu ul li { border:1px solid silver; padding:5px;font-size: 10px; }
+#compat-list-menu .lm-menu ul li a { font-weight:bold; }
+#compat-list-menu .lm-menu ul li p { padding-bottom:0; }*/
+
+.lm-wrapper { margin:0; padding:0; }
+.lm-wrapper .lm-letters { overflow:hidden; }
+* html .lm-wrapper .lm-letters { zoom:1; } /* for IE6 so that menu appears under letters */
+.lm-wrapper .lm-letters a { font-size:0.9em; display:block; float:left; padding:2px 11px; border:1px solid silver; border-right:none; text-decoration:none;}
+.lm-wrapper .lm-letters a:hover,
+.lm-wrapper .lm-letters a.lm-selected { background-color:#eaeaea; }
+.lm-wrapper .lm-letters a.lm-disabled { color:#ccc; }
+.lm-wrapper .lm-letters a.lm-last { border-right:1px solid silver; }
+.lm-wrapper .lm-letter-count { text-align:center; font-size:0.8em; line-height:1; margin-bottom:3px; color:#336699; }
+
+.lm-wrapper .lm-menu { border:1px solid silver; border-top:1px solid silver; padding:5px; z-index:10; position:absolute; margin-top:-1px; background:#fff; display:none; }
+.lm-wrapper .lm-menu ul li { list-style-type:none; margin-bottom:5px; font-size:0.9em }
+.lm-wrapper .lm-menu ol li { margin-left:0px; }
+.lm-wrapper .lm-menu .lm-no-match { color:green; }
+.lm-wrapper .lm-menu .lm-submenu { overflow:hidden; }
