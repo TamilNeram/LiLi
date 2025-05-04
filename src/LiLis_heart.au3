@@ -32,17 +32,15 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Clean_old_installs($drive_letter,$release_in_list)
-	If IniRead($settings_ini, "General", "skip_cleaning", "no") = "yes" Then Return 0
+	If IniRead($settings_ini, "Advanced", "skip_cleaning", "no") = "yes" Then Return 0
 	SendReport("Start-Clean_old_installs ( Drive : "& $drive_letter &" - Release : "& $release_in_list &" )")
 	UpdateStatus("Cleaning previous installations ( 2min )")
 	DeleteFilesInDir($files_in_source)
+	If FileExists($drive_letter & "\autorun.inf") AND NOT FileExists($drive_letter & "\autorun.inf.orig") Then FileMove($drive_letter & "\autorun.inf",$drive_letter & "\autorun.inf.orig",1)
 	FileDelete2($drive_letter & "\autorun.inf")
 	FileDelete2($drive_letter & "\lili.ico")
 
-
-
-
-	if IniRead($settings_ini, "General", "skip_full_cleaning", "no") <> "yes" Then
+	if IniRead($settings_ini, "Advanced", "skip_full_cleaning", "no") <> "yes" Then
 
 		; Common Linux Live files
 		DirRemove2($drive_letter & "\isolinux\", 1)
@@ -131,8 +129,8 @@ Func Download_virtualBox()
 				$no_internet = 0
 				$virtualbox_size = -1
 
-				$VirtualBoxUrl1 = IniRead($settings_ini, "General", "portable_virtualbox_mirror1", "none")
-				$VirtualBoxUrl2 = IniRead($settings_ini, "General", "portable_virtualbox_mirror2", "none")
+				$VirtualBoxUrl1 = IniRead($settings_ini, "VirtualBox", "portable_virtualbox_mirror1", "none")
+				$VirtualBoxUrl2 = IniRead($settings_ini, "VirtualBox", "portable_virtualbox_mirror2", "none")
 
 
 				; Testing download mirrors
@@ -262,7 +260,7 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func Uncompress_ISO_on_key($drive_letter,$iso_file,$release_in_list)
-	If IniRead($settings_ini, "General", "skip_copy", "no") = "yes" Then Return 0
+	If IniRead($settings_ini, "Advanced", "skip_copy", "no") = "yes" Then Return 0
 	SendReport("Start-Uncompress_ISO_on_key ( Drive : "& $drive_letter &" - File : "& $iso_file &" - Release : "& $release_in_list &" )")
 
 	If ProcessExists("7z.exe") > 0 Then ProcessClose("7z.exe")
@@ -289,7 +287,7 @@ EndFunc
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 #cs
-	Description : Creates a bootable USB stick from an IMG file
+	Description : Creates a bootable USB stick from a CD
 	Input :
 		$drive_letter = Letter of the drive (pre-formated like "E:" )
 		$path_to_cd = path to the CD or folder containing the Linux Live CD files
@@ -300,7 +298,7 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func Create_Stick_From_CD($drive_letter,$path_to_cd)
-	If IniRead($settings_ini, "General", "skip_copy", "no") = "yes" Then Return 0
+	If IniRead($settings_ini, "Advanced", "skip_copy", "no") = "yes" Then Return 0
 	SendReport("Start-Create_Stick_From_CD ( Drive : "& $drive_letter &" - CD Folder : "& $path_to_cd &" )")
 	FileCopyShell($path_to_cd & "\*.*", $drive_letter & "\")
 	SendReport("End-Create_Stick_From_CD")
@@ -321,16 +319,24 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Create_Stick_From_IMG($drive_letter,$img_file)
 	SendReport("Start-Create_Stick_From_IMG ( Drive : "& $drive_letter &" - File : "& $img_file & " )")
-	Local $cmd, $foo, $line, $img_size
+	Local $cmd, $foo, $line,$lines="",$errors="", $img_size,$physical_disk_number
+
+	$physical_disk_number=GiveMePhysicalDisk($drive_letter)
+
+	if NOT ($physical_disk_number <> "ERROR" AND $physical_disk_number >0 AND $physical_disk_number <> GiveMePhysicalDisk("C:")) Then
+		MsgBox(16,"Error","There was an error while trying to write IMG file to USB."&@CRLF&@CRLF&"Please contact debug-img@linuxliveusb.com."&@CRLF&@CRLF&"Thank You")
+		Return 0
+	EndIf
+
 	$img_size= Ceiling(FileGetSize($img_file)/1048576)
 	$cmd = @ScriptDir & '\tools\dd.exe if="'&$img_file&'" of=\\.\'& $drive_letter&' bs=1M --progress'
 	UpdateLog($cmd)
 	If ProcessExists("dd.exe") > 0 Then ProcessClose("dd.exe")
 	$foo = Run($cmd, @ScriptDir, @SW_HIDE, $STDIN_CHILD + $STDOUT_CHILD + $STDERR_CHILD)
-		While 1
+	While 1
 		$line &= StdoutRead($foo)
 		If @error Then ExitLoop
-
+		$lines&=$line
 		; Regular Expression to parse progression
 		$str = StringRight($line,20)
 		$is = StringRegExp($line, '\r([0-9]{1,4}\,[0-9]{1,3}\,[0-9]{1,3})\r', 0)
@@ -344,6 +350,12 @@ Func Create_Stick_From_IMG($drive_letter,$img_file)
 		EndIf
 		Sleep(500)
 	Wend
+	UpdateLog($lines)
+	While 1
+		$errors &= StderrRead($foo)
+		If @error Then ExitLoop
+	WEnd
+	;if StringInStr($errors,"error") then MsgBox(0,"ERROR","An error occurred")
 	SendReport("End-Create_Stick_From_IMG")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -379,18 +391,22 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func Rename_and_move_files($drive_letter, $release_in_list)
-	If IniRead($settings_ini, "General", "skip_moving_renaming", "no") = "yes" Then Return 0
+	If IniRead($settings_ini, "Advanced", "skip_moving_renaming", "no") = "yes" Then Return 0
 	SendReport("Start-Rename_and_move_files")
 	UpdateStatus(Translate("Renaming some files"))
 
-	RunWait3("cmd /c rename " & $drive_letter & "\isolinux syslinux", @ScriptDir, @SW_HIDE)
+	DirMove($drive_letter & "\isolinux",$drive_letter & "\syslinux",1)
+	;RunWait3("cmd /c rename " & $drive_letter & "\isolinux syslinux", @ScriptDir, @SW_HIDE)
 	FileCopy2( $drive_letter & "\syslinux\text.cfg", $drive_letter & "\syslinux\text-orig.cfg")
 
 		; Default Linux processing, no intelligence
-		RunWait3("cmd /c rename " & $drive_letter & "\boot\isolinux syslinux", @ScriptDir, @SW_HIDE)
+		DirMove($drive_letter & "\boot\isolinux",$drive_letter & "\boot\syslinux",1)
+		DirMove($drive_letter & "\HBCD\isolinux",$drive_letter & "\HBCD\syslinux",1)
 
-		RunWait3("cmd /c rename " & $drive_letter & "\isolinux syslinux", @ScriptDir, @SW_HIDE)
-		RunWait3("cmd /c rename " & $drive_letter & "\HBCD\isolinux syslinux", @ScriptDir, @SW_HIDE)
+
+		;RunWait3("cmd /c rename " & $drive_letter & "\boot\isolinux syslinux", @ScriptDir, @SW_HIDE)
+		;RunWait3("cmd /c rename " & $drive_letter & "\isolinux syslinux", @ScriptDir, @SW_HIDE)
+		;RunWait3("cmd /c rename " & $drive_letter & "\HBCD\isolinux syslinux", @ScriptDir, @SW_HIDE)
 
 		FileCopy2( $drive_letter & "\syslinux\isolinux.cfg", $drive_letter & "\syslinux\isolinux-orig.cfg")
 
@@ -410,13 +426,27 @@ Func Rename_and_move_files($drive_letter, $release_in_list)
 		isolinux2syslinux($syslinux_path)
 
 
-	; Fix for Parted Magic 4.6
+	; Fix for Parted Magic 4.6 & 4.9 & 4.10
 	If ReleaseGetVariant($release_in_list) ="pmagic" Then
 		DirMove( $drive_letter & "\pmagic-usb-4.6\boot", $drive_letter,1)
 		DirMove( $drive_letter & "\pmagic-usb-4.6\pmagic", $drive_letter,1)
 		FileMove($drive_letter & "\pmagic-usb-4.6\readme.txt",$drive_letter,1)
 		FileMove( $drive_letter & "\PMAGIC\MODULES\PMAGIC_4_6.SQFS", $drive_letter & "\PMAGIC\MODULES\pmagic-4.6.sqfs",1)
 		FileDelete( $drive_letter & "\pmagic-usb-4.6\")
+
+		DirMove( $drive_letter & "\pmagic-usb-4.9\boot", $drive_letter,1)
+		DirMove( $drive_letter & "\pmagic-usb-4.9\pmagic", $drive_letter,1)
+		FileDelete( $drive_letter & "\pmagic-usb-4.9\")
+
+		DirMove( $drive_letter & "\pmagic-usb-4.10\boot", $drive_letter,1)
+		DirMove( $drive_letter & "\pmagic-usb-4.10\pmagic", $drive_letter,1)
+		FileDelete( $drive_letter & "\pmagic-usb-4.10\")
+	EndIf
+
+	; fix for bootlogo too big of PCLinuxOS 2010
+	if NOT StringInStr(ReleaseGetSupportedFeatures($release_in_list),"fix-bootlogo") = 0 Then
+		SendReport("Fixing bootlogo too big")
+		FileCopy2(@ScriptDir&"\tools\small-bootlogo",$drive_letter & "\syslinux\bootlogo")
 	EndIf
 
 	SendReport("End-Rename_and_move_files")
@@ -438,7 +468,7 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Create_boot_menu($drive_letter,$release_in_list)
-	If IniRead($drive_letter, "General", "skip_boot_text", "no") = "yes" Then Return 0
+	If IniRead($drive_letter, "Advanced", "skip_boot_text", "no") = "yes" Then Return 0
 	SendReport("Start-Create_boot_menu")
 	$variant = ReleaseGetVariant($release_in_list)
 	$distribution = ReleaseGetDistribution($release_in_list)
@@ -478,7 +508,7 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Hide_live_files($drive_letter)
-	If IniRead($settings_ini, "General", "skip_hiding", "no") = "yes" Then return 0
+	If IniRead($settings_ini, "Advanced", "skip_hiding", "no") = "yes" Then return 0
 	SendReport("Start-Hide_live_files")
 
 	UpdateStatus("Hiding files")
@@ -565,7 +595,7 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Create_persistence_file($drive_letter,$release_in_list,$persistence_size,$hide_it)
-	If IniRead($settings_ini, "General", "skip_persistence", "no") = "yes" Then Return 0
+	If IniRead($settings_ini, "Advanced", "skip_persistence", "no") = "yes" Then Return 0
 	SendReport("Start-Create_persistence_file")
 
 	; Checking if persistence is supported for this Linux
@@ -583,7 +613,7 @@ Func Create_persistence_file($drive_letter,$release_in_list,$persistence_size,$h
 		$distribe = ReleaseGetDistribution($release_in_list)
 		$variant = ReleaseGetVariant($release_in_list)
 
-		if $distribe ="Ubuntu" OR $variant="BackTrack" Then
+		if StringInStr($distribe,"buntu") OR $variant="BackTrack" Then
 			$persistence_file= $drive_letter & '\casper-rw'
 		Else
 			; fedora
@@ -641,7 +671,7 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func Install_boot_sectors($drive_letter,$release_in_list,$hide_it)
-	If IniRead($settings_ini, "General", "skip_bootsector", "no") = "yes" Then Return 0
+	If IniRead($settings_ini, "Advanced", "skip_bootsector", "no") = "yes" Then Return 0
 	SendReport("Start-Install_boot_sectors")
 	UpdateStatus("Installing boot sectors")
 	$features=ReleaseGetSupportedFeatures($release_in_list)
@@ -723,6 +753,7 @@ EndFunc
 
 Func Uncompress_virtualbox_on_key($drive_letter)
 	SendReport("Start-Uncompress_virtualbox_on_key")
+
 	; Cleaning previous install of VBox
 	UpdateStatus("Cleaning previous VirtualBox install")
 	DirRemove2($drive_letter & "\VirtualBox\", 1)
@@ -750,7 +781,7 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Create_autorun($drive_letter,$release_in_list)
-	If IniRead($settings_ini, "General", "skip_autorun", "no") = "yes" Then Return 0
+	If IniRead($settings_ini, "Advanced", "skip_autorun", "no") = "yes" Then Return 0
 
 	SendReport("Start-Create_autorun")
 	If FileExists($drive_letter & "\autorun.inf") Then FileMove($drive_letter & "\autorun.inf",$drive_letter & "\autorun.bak",1)
@@ -774,18 +805,19 @@ Func Create_autorun($drive_letter,$release_in_list)
 	EndIf
 
 	$i=3
-	for $file in $files_in_source
-		if get_extension($file) = "exe" Then
-			if $i=3 Then
-				IniWrite($drive_letter  & "\autorun.inf", "autorun", "shell\linuxlive"&$i, "----> CD Menu ("& $file &")")
-			Else
-				IniWrite($drive_letter  & "\autorun.inf", "autorun", "shell\linuxlive"&$i, "----> CD Menu ("& $file &")")
+	if UBound($files_in_source)>0 Then
+		for $file in $files_in_source
+			if get_extension($file) = "exe" Then
+				if $i=3 Then
+					IniWrite($drive_letter  & "\autorun.inf", "autorun", "shell\linuxlive"&$i, "----> CD Menu ("& $file &")")
+				Else
+					IniWrite($drive_letter  & "\autorun.inf", "autorun", "shell\linuxlive"&$i, "----> CD Menu ("& $file &")")
+				EndIf
+				IniWrite($drive_letter & "\autorun.inf", "autorun", "shell\linuxlive"&$i&"\command", $drive_letter&"\"&$file)
+				$i=$i+1
 			EndIf
-			IniWrite($drive_letter & "\autorun.inf", "autorun", "shell\linuxlive"&$i&"\command", $drive_letter&"\"&$file)
-			$i=$i+1
-		EndIf
-	Next
-
+		Next
+	EndIf
 	SendReport("End-Create_autorun")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

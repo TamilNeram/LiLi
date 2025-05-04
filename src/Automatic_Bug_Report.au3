@@ -146,7 +146,7 @@ Func _OnAutoItError()
 	TraySetIcon(@ScriptDir&"\tools\img\lili.ico")
 
     ;   choose action to be taken
-	If IniRead($settings_ini, "General", "skip_autoreport", "no")=="no" Then
+	If IniRead($settings_ini, "Advanced", "skip_autoreport", "no")=="no" Then
 		If SendBug() <> "OK" Then
 			GUICtrlSetData($sending_status,Translate("Report status")& " : " & Translate("Error (not sent)"))
 		Else
@@ -190,6 +190,13 @@ Func SendBug()
 	AddPostData("REPORTER_ID",IniRead($settings_ini, "General", "unique_ID", "none"))
 	AddPostData("ERROR_MSG",$sErrorMsg)
 	AddPostData("SOFTWARE_VERSION",$software_version)
+	; Little fix for AutoIT 3.3.0.0
+	$os_version_long= RegRead("HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "ProductName")
+	if Not @error AND ( StringInStr($os_version_long,"Seven") OR StringInStr($os_version_long,"Windows 7")) Then
+		$os_version="WIN_SEVEN"
+	Else
+		$os_version=@OSVersion
+	EndIf
 	AddPostData("OS_VERSION",@OSVersion)
 	AddPostData("ARCH",@OSArch)
 	AddPostData("SERVICE_PACK",@OSServicePack)
