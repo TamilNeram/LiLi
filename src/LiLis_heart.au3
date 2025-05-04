@@ -266,7 +266,12 @@ Func Uncompress_ISO_on_key($drive_letter,$iso_file,$release_in_list)
 	If IniRead($settings_ini, "General", "skip_copy", "no") == "yes" Then Return 0
 	If ProcessExists("7z.exe") > 0 Then ProcessClose("7z.exe")
 	UpdateStatus(Translate("Décompression de l'ISO sur la clé") & " ( 5-10" & Translate("min") & " )")
-	$install_size = ReleaseGetInstallSize($release_in_list)
+
+	if ReleaseGetCodename($release_in_list)="default" Then
+		$install_size=Round(FileGetSize($iso_file)/1048576)
+	Else
+		$install_size = ReleasegetInstallSize($release_number)
+	EndIf
 
 	; Just in case ...
 	If $install_size < 5 Then $install_size = 730
@@ -399,8 +404,12 @@ Func Rename_and_move_files($drive_letter, $release_in_list)
 			$syslinux_path = $drive_letter & "\syslinux\"
 		Elseif FileExists($drive_letter & "\isolinux.cfg") Then
 			$syslinux_path = $drive_letter & "\"
+		Elseif FileExists($drive_letter & "\BOOT\SYSLINUX\syslinux.cfg") Then
+			$syslinux_path = $drive_letter & "\BOOT\SYSLINUX\"
 		Elseif FileExists($drive_letter & "\HBCD\isolinux.cfg") Then
 			$syslinux_path = $drive_letter & "\HBCD\"
+		Else
+			$syslinux_path = $drive_letter & "\"
 		EndIf
 		isolinux2syslinux($syslinux_path)
 
@@ -408,6 +417,15 @@ Func Rename_and_move_files($drive_letter, $release_in_list)
 		FileRename( $drive_letter & "\syslinux\isolinux.cfg", $drive_letter & "\syslinux\isolinux.cfg-old")
 	EndIf
 
+
+	; Fix for Parted Magic 4.6
+	If ReleaseGetVariant($release_in_list) ="pmagic" Then
+		DirMove( $drive_letter & "\pmagic-usb-4.6\boot", $drive_letter,1)
+		DirMove( $drive_letter & "\pmagic-usb-4.6\pmagic", $drive_letter,1)
+		FileMove($drive_letter & "\pmagic-usb-4.6\readme.txt",$drive_letter,1)
+		FileMove( $drive_letter & "\PMAGIC\MODULES\PMAGIC_4_6.SQFS", $drive_letter & "\PMAGIC\MODULES\pmagic-4.6.sqfs",1)
+		FileDelete( $drive_letter & "\pmagic-usb-4.6\")
+	EndIf
 
 	SendReport("End-Rename_and_move_files")
 EndFunc
@@ -466,8 +484,17 @@ Func Hide_live_files($drive_letter)
 	If IniRead($settings_ini, "General", "skip_hiding", "no") == "yes" Then return 0
 
 	UpdateStatus("Masquage des fichiers")
-	HideFile($drive_letter & "\syslinux\")
 	HideFilesInDir($files_in_source)
+	HideFile($drive_letter & "\syslinux\")
+	HideFile($drive_letter & "\syslinux.cfg")
+
+	; Fix for Parted Magic 4.6
+	If ReleaseGetVariant($release_number)="pmagic" Then
+			HideFile($drive_letter & "\pmagic\")
+			HideFile($drive_letter & "\readme.txt")
+			HideFile( $drive_letter & "\boot\")
+	EndIf
+
 	#cs
 	; Common Linux Live files
 	HideFile($drive_letter & "\isolinux\")
@@ -594,7 +621,7 @@ Func Install_boot_sectors($drive_letter)
 		Else
 			$sysarg = " "
 		EndIf
-		RunWait3('"' & @ScriptDir & '\tools\syslinux.exe" -m -a' & $sysarg & ' -d ' & $drive_letter & '\syslinux ' & $drive_letter, @ScriptDir, @SW_HIDE)
+		RunWait3('"' & @ScriptDir & '\tools\syslinux.exe" -maf' & $sysarg & ' -d ' & $drive_letter & '\syslinux ' & $drive_letter, @ScriptDir, @SW_HIDE)
 
 	SendReport("End-Install_boot_sectors")
 EndFunc
@@ -651,18 +678,13 @@ Func Uncompress_virtualbox_on_key($drive_letter)
 
 	; Unzipping to the key
 	UpdateStatus(Translate("Décompression de Virtualbox sur la clé") & " ( 4" & Translate("min") & " )")
-	Run7zip2('"' & @ScriptDir & '\tools\7z.exe" x "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename & '" -r -aoa -o' & $drive_letter, 90)
+	Run7zip2('"' & @ScriptDir & '\tools\7z.exe" x "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename & '" -r -aoa -o' & $drive_letter, 140)
 
 	; maybe check after ?
 	SendReport("End-Uncompress_virtualbox_on_key")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-
-
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -759,7 +781,7 @@ Func Final_check()
 
 
 	; If not admin and virtaulbox option has been selected => WARNING
-	If Not IsAdmin() Then $avert_admin = Translate("Vous n'avez pas les droits suffisants pour démarrer VirtualBox sur cette machine.") & @CRLF & Translate("Enregistrez-vous sur le compte administrateur ou lancez le logiciel avec les droits d'administrateur pour qu'il fonctionne.")
+	;If Not IsAdmin() Then $avert_admin = Translate("Vous n'avez pas les droits suffisants pour démarrer VirtualBox sur cette machine.") & @CRLF & Translate("Enregistrez-vous sur le compte administrateur ou lancez le logiciel avec les droits d'administrateur pour qu'il fonctionne.")
 
 	; If not enough RAM => WARNING
 	If Round($mem[2] / 1024) < 256 Then $avert_mem = Translate("Vous avez moins de 256Mo de mémoire vive disponible.") & @CRLF & Translate("Cela ne suffira pas pour lancer LinuxLive directement sous windows.")
