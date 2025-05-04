@@ -5,7 +5,7 @@
 Func InitLog()
 	DirCreate($log_dir)
 	UpdateLog(LogSystemConfig())
-	SendReport("logfile-" & $logfile)
+	;SendReport("logfile-" & $logfile)
 EndFunc   ;==>InitLog
 
 Func LogSystemConfig()
@@ -31,12 +31,19 @@ Func LogSystemConfig()
 	$line &= @CRLF & "LiLi USB Creator : " & $software_version
 	$line &= @CRLF & "Compatibility List Version : " & $current_compatibility_list_version
 	$line &= @CRLF & "Unique ID : " & ReadSetting("General","unique_id")
+
+	if FileExists("Z:/bin/uname") Then
+		$realOS=_RunReadStd("Z:/bin/uname -s")
+		$line &= @CRLF & "Wine Detected : "&$realOS[1]
+	EndIf
+
 	$line &= @CRLF & "OS Type : " & @OSType
 	$line &= @CRLF & "OS Version : " & $os_version
 	$line &= @CRLF & "OS Build : " & @OSBuild
 	$line &= @CRLF & "OS Service Pack : " & @OSServicePack
 	$line &= @CRLF & "OS Lang :  " & HumanOSLang(@OSLang) & " ("& @OSLang&")"
 	$line &= @CRLF & "Language : " & HumanOSLang(@MUILang) & " ("& @MUILang&")"
+	$line &= @CRLF & "Font size : " & $font_size
 	$line &= @CRLF & "Architecture : " & @OSArch
 	$line &= @CRLF & "Memory : " & $mem_stats
 
@@ -66,13 +73,22 @@ Func LogSystemConfig()
 EndFunc   ;==>LogSystemConfig
 
 Func PreviousInstallReport()
+	; Getting Portable VirtualBox infos
+	if FileExists($selected_drive&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini") Then
+		$vbox_report=" and Portable-VirtualBox pack "&IniRead($selected_drive&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","NotFound") _
+		& " ( "&IniRead($selected_drive&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","virtualbox_version","NotFound")&" )"
+	Else
+		$vbox_report=" and no Portable-VirtualBox installed"
+	EndIf
+
+	; Getting Live USB infos
 	if FileExists($selected_drive&"\"&$autoclean_settings) Then
 		$installed_linux=IniRead($selected_drive&"\"&$autoclean_settings,"General","Installed_Linux","NotFound")
 		$linux_codename=IniRead($selected_drive&"\"&$autoclean_settings,"General","Installed_Linux_Codename","NotFound")
 		$install_size=GetPreviousInstallSizeMB($selected_drive)
-		Return $installed_linux&" ("&$linux_codename&") using "&$install_size&"MB"
+		Return $installed_linux&" ("&$linux_codename&") using "&$install_size&"MB"&$vbox_report
 	Else
-		Return "No previous install found on key"
+		Return "No previous install found on key"&$vbox_report
 	EndIf
 EndFunc
 

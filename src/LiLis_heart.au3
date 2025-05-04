@@ -1,5 +1,4 @@
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 #cs
 	Description : Format a specified drive letter to FAT32
@@ -131,7 +130,35 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#cs
+	Description : Check for VirtualBox update online
+	Input :
+		No input
+	Output :
+		None
+#ce
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Func Check_VirtualBox_Update()
+	SendReport("Start-Check_VirtualBox_Update")
+	; Checking online for an update
+	$vbox_last_version=IniRead($updates_ini,"VirtualBox","version","")
+	$cached_version=IniRead(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","0")
+	$compare = CompareVersion($vbox_last_version,$cached_version)
+	if $compare=1 Then
+		SendReport("END-Check_VirtualBox_Update : Online version is newer, need to download the update")
+		Return "UPDATE-AVAILABLE"
+	elseif $compare=2 Then
+		SendReport("END-Check_VirtualBox_Update : Online version is older (SVN repo ?), nothing to do ")
+		return "NO-UPDATE"
+	Else
+		SendReport("END-Check_VirtualBox_Update : They are equal, nothing to do")
+		return "NO-UPDATE"
+	EndIf
 
+EndFunc
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -148,63 +175,53 @@ EndFunc
 Func Download_virtualBox()
 	Global $current_download
 	SendReport("Start-Download_virtualBox")
-				UpdateStatus("Setting up virtualization software")
-				$no_internet = 0
-				$virtualbox_size = -1
 
-				$VirtualBoxUrl1 = ReadSetting("VirtualBox", "portable_virtualbox_mirror1")
-				$VirtualBoxUrl2 = ReadSetting("VirtualBox", "portable_virtualbox_mirror2")
+	if Check_VirtualBox_Update() <> "UPDATE-AVAILABLE" Then
+		SendReport("END-Download_virtualBox : no update to download")
+		Return 2
+	EndIf
 
-				; Testing download mirrors
-				$virtualbox_size1 = InetGetSize($VirtualBoxUrl1)
-				$virtualbox_size2 = InetGetSize($VirtualBoxUrl2)
+	UpdateStatus("Setting up virtualization software")
+	$no_internet = 0
+	$virtualbox_size = IniRead($updates_ini,"VirtualBox","filesize","ERROR")
+	If $virtualbox_size="ERROR" Then
+		SendReport("END-Download_virtualBox : could not check update size")
+		Return 2
+	EndIf
 
-				; Selecting mirror
-				Global $virtualbox_size
-				If $virtualbox_size1 <= 0 Then
-					If $virtualbox_size2 <= 0 Then
-						$virtualbox_size = -1
-					Else
-						$VirtualBoxUrl = $VirtualBoxUrl2
-						$virtualbox_size = $virtualbox_size2
-					EndIf
-				Else
-					$VirtualBoxUrl = $VirtualBoxUrl1
-					$virtualbox_size = $virtualbox_size1
-				EndIf
+	$mirrors_nbr=10
+	$i=1
 
-				SendReport("Start-Download_virtualBox-1")
-				UpdateLog("Found Mirror 1 : " & $VirtualBoxUrl1 & " with VirtualBox size : " & $virtualbox_size1 )
-				UpdateLog("Found Mirror 2 : " & $VirtualBoxUrl2 & " with VirtualBox size : " & $virtualbox_size2 )
+	Dim $vbox_mirrors[10]
+	Do
+		$vbox_mirrors[$i-1]=IniRead($updates_ini,"VirtualBox","Mirror"&$i,"")
+		$i+=1
+	Until $i>$mirrors_nbr
 
-				; No mirror working we should log that
-				If $virtualbox_size <= 0 Then
-					$no_internet = 1
-					UpdateLog("No working mirror !")
-					$downloaded_virtualbox_filename = "VirtualBox.zip"
-				Else
-					$downloaded_virtualbox_filename = unix_path_to_name($VirtualBoxUrl)
-				EndIf
+	$i=0
+	Do
+		$size=InetGetSize($vbox_mirrors[$i],3)
+		$i+=1
+	Until ($size=$virtualbox_size OR $i=10)
+
+	if NOT $size=$virtualbox_size Then
+		SendReport("END-Download_virtualBox : could not find an online mirror")
+		Return 2
+	Else
+		$downloaded_virtualbox_filename = "VirtualBox.zip"
+		$online_mirror=$vbox_mirrors[$i-1]
+		SendReport("IN-Download_virtualBox : using online mirror "&$online_mirror)
+	EndIf
 
 
-				$virtualbox_already_downloaded = 0
-				SendReport("Start-Download_virtualBox-2")
 
-				; Checking if last version has aleardy been downloaded
-				If FileExists(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) And $virtualbox_size > 0 And $virtualbox_size = FileGetSize(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) Then
-					; Already have last version, no download needed
-					UpdateStatus("VirtualBox already downloaded")
-					Sleep(700)
-					$check_vbox = 2
-				ElseIf FileExists(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) And $virtualbox_size > 0 And $virtualbox_size <> FileGetSize(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) Then
-					; A new version is available, downloading it
+
 					UpdateStatus("A new version of VirtualBox is available")
 					Sleep(700)
-					UpdateStatus("This new version will be downloaded")
-					Sleep(700)
 					UpdateStatus("Downloading VirtualBox as a background task")
 					Sleep(700)
-					$current_download = InetGet($VirtualBoxUrl, @ScriptDir & "\tools\" & $downloaded_virtualbox_filename, 1, 1)
+					FileDelete(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename)
+					$current_download = InetGet($online_mirror, @ScriptDir & "\tools\" & $downloaded_virtualbox_filename, 3, 1)
 					If InetGetInfo($current_download, 4)=0 Then
 						UpdateStatus("Download started succesfully")
 						$check_vbox = 1
@@ -214,50 +231,6 @@ Func Download_virtualBox()
 						UpdateStatus("VirtualBox will not be installed")
 						$check_vbox = 0
 					EndIf
-
-				ElseIf FileExists(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) And $virtualbox_size <= 0 Then
-					; Alerady downloaded but can't tell if it's last version and if it's good
-					UpdateStatus("VirtualBox already downloaded")
-					Sleep(1000)
-					UpdateStatus("Integrity could not be verified")
-					Sleep(1000)
-					UpdateStatus("Will attempt installation")
-					$check_vbox = 2
-
-				ElseIf $virtualbox_size > 0 Then
-					; Does not have any version, downloading it
-					UpdateStatus("Downloading VirtualBox as a background task")
-					Sleep(1000)
-					$current_download = InetGet($VirtualBoxUrl, @ScriptDir & "\tools\" & $downloaded_virtualbox_filename, 1, 1)
-					If InetGetInfo($current_download, 4)=0 Then
-						UpdateStatus("Download started succesfully")
-						Sleep(1000)
-						$check_vbox = 1
-					Else
-						; Can't download it => aborted
-						UpdateStatus("Download failed to start")
-						Sleep(1000)
-						UpdateStatus("VirtualBox will not be installed")
-						$check_vbox = 0
-					EndIf
-
-				Else
-					; Cannot start download, VirtualBox install is aborted
-					UpdateStatus("Cannot download")
-					Sleep(1000)
-					UpdateStatus("VirtualBox will not be installed")
-					$check_vbox = 0
-				EndIf
-
-				;#ce
-				#cs
-				$downloaded_virtualbox_filename = "VirtualBox.zip"
-				$virtualbox_already_downloaded = 1
-				$virtualbox_size = FileGetSize(@ScriptDir & "\tools\VirtualBox.zip")
-					UpdateStatus("VirtualBox already downloaded")
-					Sleep(1000)
-					$check_vbox = 2
-					#ce
 
 				Sleep(2000)
 				SendReport("End-Download_virtualBox")
@@ -385,7 +358,7 @@ Func Create_Stick_From_IMG($drive_letter,$img_file)
 	WEnd
 	UpdateLog($lines&$errors)
 	if StringInStr($errors,"error") Then
-		UpdateStatus("An error occurred."&@CRLF&"Please close any application accessing your key and try again.")
+		UpdateStatus(Translate("An error occurred")&"."&@CRLF&Translate("Please close any application accessing your key and try again")&".")
 		Return -1
 	EndIf
 	SendReport("End-Create_Stick_From_IMG")
@@ -394,19 +367,38 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func isolinux2syslinux($syslinux_path)
-	$syslinux_cfg = FileOpen($syslinux_path&"isolinux.cfg",0)
-	If $syslinux_cfg <> -1 Then
-		$lines=""
+
+
+	; Replacing references to isolinux/ by syslinux/ in *.cfg files
+	$search = FileFindFirstFile($syslinux_path&"*.cfg")
+	If $search <> -1 Then
 		While 1
-			$lines &= FileReadLine($syslinux_cfg)& @CRLF
-			If @error = -1 Then ExitLoop
-		Wend
-		FileClose($syslinux_cfg)
-		$lines = StringReplace($lines,"isolinux/","syslinux/")
-		$syslinux_cfg = FileOpen($syslinux_path&"syslinux.cfg",2)
-		FileWrite ( $syslinux_cfg , $lines )
-		FileClose($syslinux_cfg)
+			$file = FileFindNextFile($search)
+			If @error Then ExitLoop
+			$content = FileRead($syslinux_path&$file)
+			if StringInStr($content,"isolinux/")>0 Then
+				SendReport("Found a file ("&$syslinux_path&$file&") with a reference to 'isolinux/' => replacing with 'syslinux/'")
+				FileOverwrite($syslinux_path&$file,StringReplace($content,"isolinux/","syslinux/"))
+			EndIf
+		WEnd
+		FileClose($search)
 	EndIf
+
+	; Replacing references to isolinux/ by syslinux/ in *.txt files
+	$search = FileFindFirstFile($syslinux_path&"*.txt")
+	If $search <> -1 Then
+		While 1
+			$file = FileFindNextFile($search)
+			If @error Then ExitLoop
+			$content = FileRead($syslinux_path&$file)
+			if StringInStr($content,"isolinux/")>0 Then
+				SendReport("Found a file ("&$syslinux_path&$file&") with a reference to 'isolinux/' => replacing with 'syslinux/'")
+				FileOverwrite($syslinux_path&$file,StringReplace($content,"isolinux/","syslinux/"))
+			EndIf
+		WEnd
+		FileClose($search)
+	EndIf
+	FileCopy($syslinux_path&"isolinux.cfg",$syslinux_path&"syslinux.cfg")
 EndFunc
 
 
@@ -427,13 +419,16 @@ Func Rename_and_move_files($drive_letter, $release_in_list)
 	SendReport("Start-Rename_and_move_files")
 	UpdateStatus(Translate("Renaming some files"))
 
-	DirMove($drive_letter & "\isolinux",$drive_letter & "\syslinux",1)
+
 	;RunWait3("cmd /c rename " & $drive_letter & "\isolinux syslinux", @ScriptDir, @SW_HIDE)
 	FileCopy2( $drive_letter & "\syslinux\text.cfg", $drive_letter & "\syslinux\text-orig.cfg")
 
 		; Default Linux processing, no intelligence
-		DirMove($drive_letter & "\boot\isolinux",$drive_letter & "\boot\syslinux",1)
-		DirMove($drive_letter & "\HBCD\isolinux",$drive_letter & "\HBCD\syslinux",1)
+		if Not FileExists($drive_letter & "\boot\syslinux") AND Not FileExists($drive_letter & "\syslinux") then
+			DirMove($drive_letter & "\isolinux",$drive_letter & "\syslinux",1)
+			DirMove($drive_letter & "\boot\isolinux",$drive_letter & "\boot\syslinux",1)
+			DirMove($drive_letter & "\HBCD\isolinux",$drive_letter & "\HBCD\syslinux",1)
+		EndIf
 
 
 		;RunWait3("cmd /c rename " & $drive_letter & "\boot\isolinux syslinux", @ScriptDir, @SW_HIDE)
@@ -452,7 +447,7 @@ Func Rename_and_move_files($drive_letter, $release_in_list)
 			$syslinux_path = $drive_letter & "\BOOT\SYSLINUX\"
 		Elseif FileExists($drive_letter & "\HBCD\isolinux.cfg") Then
 			$syslinux_path = $drive_letter & "\HBCD\"
-		Elseif FileExists($drive_letter & "\boot\i386\loader\isolinux.cfg") AND ReleaseGetVariant($release_in_list)="opensuse" Then
+		Elseif FileExists($drive_letter & "\boot\i386\loader\isolinux.cfg") AND (ReleaseGetVariant($release_in_list)="opensuse" OR StringInStr(ReleaseGetSupportedFeatures($release_in_list),"opensuse-mbrid")>0 )Then
 			FileDelete($drive_letter&"\syslinux.cfg")
 			DirMove($drive_letter & "\boot\i386\loader", $drive_letter & "\boot\syslinux",1)
 			$syslinux_path = $drive_letter & "\boot\syslinux\"
@@ -491,7 +486,7 @@ Func Rename_and_move_files($drive_letter, $release_in_list)
 	; fix for bootlogo too big of PCLinuxOS 2010
 	if NOT StringInStr(ReleaseGetSupportedFeatures($release_in_list),"fix-bootlogo") = 0 Then
 		SendReport("Fixing bootlogo too big")
-		FileCopy2(@ScriptDir&"\tools\small-bootlogo",$drive_letter & "\syslinux\bootlogo")
+		FileCopy2(@ScriptDir&"\tools\boot-menus\small-bootlogo",$drive_letter & "\syslinux\bootlogo")
 	EndIf
 
 	SendReport("End-Rename_and_move_files")
@@ -534,12 +529,24 @@ Func Create_boot_menu($drive_letter,$release_in_list)
 		Elseif $variant = "Sidux" Then
 			SendReport("IN-Create_boot_menu for Sidux")
 			Sidux_WriteTextCFG($drive_letter)
-		Elseif $distribution = "ubuntu" OR $variant= "mint" Then
-			SendReport("IN-Create_boot_menu for Ubuntu and Mint Debian")
+		Elseif $variant="XBMC" Then
+			SendReport("IN-Create_boot_menu for XBMC")
+			XBMC_WriteTextCFG($drive_letter,$release_in_list)
+		Elseif $distribution = "ubuntu" Then
+			SendReport("IN-Create_boot_menu for Ubuntu")
 			Ubuntu_WriteTextCFG($drive_letter,$release_in_list)
+		Elseif $distribution = "debian" Then
+			SendReport("IN-Create_boot_menu for Debian")
+			Debian_WriteTextCFG($drive_letter,$release_in_list)
+		Elseif $variant="Crunchbang" Then
+			SendReport("IN-Create_boot_menu for CrunchBang")
+			Crunchbang_WriteTextCFG($drive_letter,$release_in_list)
 		EndIf
 	Elseif $variant = "opensuse" Then
-			SendReport("IN-Create_boot_menu for OpenSuse")
+			SendReport("IN-Create_boot_menu for OpenSuse : Setting MBR ID")
+			Set_OpenSuse_MBR_ID($drive_letter)
+	ElseIf StringInStr($features,"opensuse-mbrid")>0 then
+			SendReport("IN-Create_boot_menu for OpenSuse variant: Setting MBR ID")
 			Set_OpenSuse_MBR_ID($drive_letter)
 	Else
 		SendReport("IN-Create_boot_menu for Regular Linux")
@@ -654,6 +661,7 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Create_persistence_file($drive_letter,$release_in_list,$persistence_size,$hide_it)
+	Global $persistence_file
 	If ReadSetting( "Advanced", "skip_persistence") = "yes" Then Return 0
 	SendReport("Start-Create_persistence_file")
 
@@ -672,40 +680,57 @@ Func Create_persistence_file($drive_letter,$release_in_list,$persistence_size,$h
 		$distribe = ReleaseGetDistribution($release_in_list)
 		$variant = ReleaseGetVariant($release_in_list)
 
+
 		if StringInStr($features,"ubuntu-persistence")<>0 Then
 			; Ubuntu
-			$persistence_file= $drive_letter & '\casper-rw'
-			AddToSmartClean($drive_letter,"casper-rw")
+			$persistence_file= 'casper-rw'
+			UpdateLog("Found feature ubuntu-persistence, persistence file will be "&$persistence_file)
 		Elseif StringInStr($features,"sidux-persistence")<>0 Then
 			; Sidux
-			$persistence_file= $drive_letter &"\sidux\sidux-rw"
-			AddToSmartClean($drive_letter,"sidux")
+			$persistence_file= "sidux\sidux-rw"
+			UpdateLog("Found feature sidux-persistence, persistence file will be "&$persistence_file)
 		Elseif StringInStr($features,"aptosid-persistence")<>0 Then
 			; Aptosid (ex-Sidux)
-			$persistence_file= $drive_letter &"\aptosid\aptosid-rw"
-			AddToSmartClean($drive_letter,"aptosid")
+			$persistence_file= "aptosid\aptosid-rw"
+			UpdateLog("Found feature aptosid-persistence, persistence file will be "&$persistence_file)
 		Elseif StringInStr($features,"fedora-persistence")<>0 Then
 			; Fedora
-			$persistence_file= $drive_letter & '\LiveOS\overlay-' & StringReplace(DriveGetLabel($drive_letter)," ", "_") & '-' & Get_Disk_UUID($drive_letter)
-			AddToSmartClean($drive_letter,"LiveOS")
+			$persistence_file= 'LiveOS\overlay-' & StringReplace(DriveGetLabel($drive_letter)," ", "_") & '-' & Get_Disk_UUID($drive_letter)
+			UpdateLog("Found feature fedora-persistence, persistence file will be "&$persistence_file)
 		Elseif StringInStr($features,"debian-persistence")<>0 Then
-			; Debian > 6.0
-			$persistence_file= $drive_letter & '\live-rw'
-			AddToSmartClean($drive_letter,"live-rw")
+			; Debian > 6.0 and CrunchBang 10 and XBMC Live
+			$persistence_file= 'live-rw'
+			UpdateLog("Found feature debian-persistence, persistence file will be "&$persistence_file)
+		Elseif StringInStr($features,"custom-persistence")<>0 Then
+			; Custom persistence filename
+			$features_array=StringSplit ($features,",",2)
+			FOR $feature IN $features_array
+				if StringInStr($feature,"custom-persistence")<>0 Then
+					$persistence_file=StringReplace($feature,"custom-persistence:","")
+				EndIf
+			Next
+			if $persistence_file <> "" Then
+				UpdateLog("Found feature custom-persistence, persistence file will be "&$persistence_file)
+			Else
+				$persistence_file= 'casper-rw'
+				UpdateLog("Found feature custom-persistence but no persistence file set. Falling back to default file name ("&$persistence_file&")")
+			EndIf
+
 		Else
 			; Default mode is Ubuntu
-			$persistence_file= $drive_letter & '\casper-rw'
-			AddToSmartClean($drive_letter,"casper-rw")
+			$persistence_file= 'casper-rw'
+			UpdateLog("Found feature  default persistence ??, persistence file will be "&$persistence_file)
 		Endif
 
-		Create_Empty_File($persistence_file, $persistence_size)
-		If ( $hide_it = $GUI_CHECKED) Then HideFile($persistence_file)
+		Create_Empty_File($drive_letter&"\"&$persistence_file, $persistence_size)
+
+		If ( $hide_it = $GUI_CHECKED) Then HideFile($drive_letter&"\"&$persistence_file)
 		$time_to_format=3
 		if ($persistence_size >= 1000) Then $time_to_format=6
 		if ($persistence_size >= 2000) Then $time_to_format=10
 		if ($persistence_size >= 3000) Then $time_to_format=15
 		UpdateStatus(Translate("Formating persistence file") & " ( ±"& $time_to_format & " " & Translate("min") & " )")
-		EXT2_Format_File($persistence_file)
+		EXT2_Format_File($drive_letter&"\"&$persistence_file)
 	Else
 		UpdateStatus("Live mode : no persistence file")
 	EndIf
@@ -759,19 +784,27 @@ Func Install_boot_sectors($drive_letter,$release_in_list,$hide_it)
 		; Syslinux will chainload GRUB loader
 		DirCreate($drive_letter &"\syslinux")
 		FileCopy2(@ScriptDir & '\tools\grub.exe',$drive_letter & "\syslinux\grub.exe")
-		FileCopy2(@ScriptDir & '\tools\grub-syslinux.cfg',$drive_letter & "\syslinux\syslinux.cfg")
+		FileCopy2(@ScriptDir & '\tools\boot-menus\grub-syslinux.cfg',$drive_letter & "\syslinux\syslinux.cfg")
 
 		if NOT (FileExists($drive_letter&"\menu.lst") OR FileExists($drive_letter&"\boot\menu.lst") OR FileExists($drive_letter&"\boot\grub\menu.lst")) Then
 			SendReport("--------------> ERROR : syslinux.cfg and menu.lst not found !")
 		EndIf
 	EndIf
 
-	; Installing the syslinux boot sectors using Syslinux 4 if feature is set.
-	if StringInStr($features,"syslinux4") > 0 Then
-		InstallSyslinux($drive_letter,4)
+	$syslinux_version = AutoDetectSyslinuxVersion($drive_letter)
+
+	; AutoDetection for syslinux 3/4
+	if $syslinux_version >= 3 Then
+		InstallSyslinux($drive_letter,$syslinux_version)
 	Else
-		InstallSyslinux($drive_letter,3)
+		; Installing the syslinux boot sectors using Syslinux 4 if feature is set.
+		if StringInStr($features,"syslinux4") > 0 Then
+			InstallSyslinux($drive_letter,4)
+		Else
+			InstallSyslinux($drive_letter,3)
+		EndIf
 	EndIf
+
 	;RunWait3('"' & @ScriptDir & '\tools\syslinux.exe" -maf -d ' & $drive_letter & '\syslinux ' & $drive_letter, @ScriptDir, @SW_HIDE)
 
 	If ( $hide_it <> $GUI_CHECKED) Then ShowFile($drive_letter & '\ldlinux.sys')
@@ -802,7 +835,44 @@ Func Check_virtualbox_download()
 		UpdateStatusNoLog(Translate("Downloading VirtualBox") & "  : " & $prog & "% ( " & Round(InetGetInfo($current_download,0) / (1024 * 1024), 1) & "/" & Round($virtualbox_size / (1024 * 1024), 1) & " " & Translate("MB") & " )")
 		Sleep(300)
 	Until InetGetInfo($current_download, 2)
+
 	UpdateStatus("Download complete")
+	$control_md5=IniRead($updates_ini,"VirtualBox","file_md5","")
+	$FileToHash=@ScriptDir & "\tools\" & $downloaded_virtualbox_filename
+
+	Local $filehandle = FileOpen($FileToHash, 16)
+	Local $buffersize=0x20000,$final=0,$hash=""
+
+	UpdateStatus(Translate("Checking VirtualBox archive integrity"))
+	SendReport("IN-Check_virtualbox_download : Crypto Library Startup")
+	_Crypt_Startup()
+	$iterations = Ceiling(FileGetSize($FileToHash) / $buffersize)
+	For $i = 1 To $iterations
+		if $i=$iterations Then $final=1
+		$hash=_Crypt_HashData(FileRead($filehandle, $buffersize),0x00008003,$final,$hash)
+		$percent_md5 = Round(100 * $i / $iterations)
+		UpdateStatusNoLog(Translate("Checking VirtualBox archive integrity")&" ("&$percent_md5&"%)" )
+	Next
+	FileClose($filehandle)
+	_Crypt_Shutdown()
+	SendReport("IN-Check_virtualbox_download : Crypto Library shutdown. Hash is "&$hash)
+	$hexa_hash = StringTrimLeft($hash, 2)
+
+	If StringStripWS($hexa_hash,3)=$control_md5 Then
+		UpdateStatus(Translate("VirtualBox archive integrity checked"))
+		Sleep(1500)
+		UpdateStatus(Translate("Unzipping VirtualBox archive to disk"))
+		DirRemove(@ScriptDir&"\tools\VirtualBox\",1)
+		RunWait3('"' & @ScriptDir & '\tools\7z.exe" x -y "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename,@ScriptDir & "\tools\")
+		if IniRead(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","ERROR")<> "ERROR" Then
+			FileDelete(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename)
+			$virtualbox_realsize=IniRead($updates_ini,"VirtualBox","realsize",$virtualbox_default_realsize)
+		EndIf
+	Else
+		UpdateStatus(Translate("VirtualBox archive is corrupted"))
+		Return "ERROR"
+	EndIf
+
 	SendReport("End-Check_virtualbox_download")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -822,42 +892,46 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-Func Uncompress_virtualbox_on_key($drive_letter)
-	SendReport("Start-Uncompress_virtualbox_on_key")
+Func Install_virtualbox_on_key($drive_letter)
+	SendReport("Start-Install_virtualbox_on_key")
 	Local $downloaded_version,$installed_version
 
-	if FileExists($drive_letter&"\VirtualBox\") Then
 
-		; Portable-VirtualBox already installed, checking if older
-		DirRemove(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox",1)
-		RunWait3('"' & @ScriptDir & '\tools\7z.exe" x -y "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename & '" VirtualBox\Portable-VirtualBox\linuxlive\settings.ini',@ScriptDir & "\tools\")
 
-		if FileExists(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini") Then
-			$downloaded_version=IniRead(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","3.0.0.0")
-			$installed_version=IniRead($drive_letter&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","3.0.0.0")
-			SendReport("IN-Uncompress_virtualbox_on_key (downloaded pack="&$downloaded_version&" - installed pack="&$installed_version&")")
-			if GenericVersionCode($downloaded_version)<=GenericVersionCode($installed_version) Then
-				SendReport("End-Uncompress_virtualbox_on_key (Pack is up to date)")
-				Return "1"
-			Else
-				SendReport("IN-Uncompress_virtualbox_on_key (Pack needs to be updated)")
-			EndIf
+	if FileExists(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini") Then
+		$cached_version=IniRead(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","3.0.0.0")
+		$installed_version=IniRead($drive_letter&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","0")
+		SendReport("IN-Install_virtualbox_on_key (downloaded pack="&$cached_version&" - installed pack="&$installed_version&")")
+
+		$compare = CompareVersion($cached_version,$installed_version)
+		if $compare=1 Then
+			; Cached version is newer, need to update the installed one
+			SendReport("IN-Install_virtualbox_on_key (Pack needs to be updated)")
 		Else
-			SendReport("IN-Uncompress_virtualbox_on_key (Warning : settings.ini not found)")
+			SendReport("End-Install_virtualbox_on_key (Pack is up to date)")
+			Return "1"
 		EndIf
-
-		; Cleaning previous install of VBox
-		UpdateStatus("Updating Portable-VirtualBox pack")
-		DirRemove2($drive_letter & "\VirtualBox\", 1)
-
+	Else
+		SendReport("END-Install_virtualbox_on_key (Warning : settings.ini not found, error while uncompressing ?)")
+		Return "1"
 	EndIf
+
+	; Cleaning previous install of VBox
+	UpdateStatus("Updating Portable-VirtualBox pack")
+	DirRemove2($drive_letter & "\VirtualBox\", 1)
 
 	; Unzipping to the key
 	UpdateStatus(Translate("Extracting VirtualBox on key") & " ( 4" & Translate("min") & " )")
-	Run7zip2('"' & @ScriptDir & '\tools\7z.exe" x "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename & '" -r -aoa -y -o' & $drive_letter, 140)
+	;Run7zip2('"' & @ScriptDir & '\tools\7z.exe" x "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename & '" -r -aoa -y -o' & $drive_letter, 140)
+	DirRemove($drive_letter & "\VirtualBox",1)
+	DirCopy(@ScriptDir & "\tools\VirtualBox",$drive_letter & "\VirtualBox",1)
 
-	; maybe check after ?
-	SendReport("End-Uncompress_virtualbox_on_key")
+	if IniRead($drive_letter&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","3.0.0.0") = $cached_version Then
+		SendReport("End-Install_virtualbox_on_key : Pack "&$cached_version&" successfully installed to key")
+	Else
+		SendReport("End-Install_virtualbox_on_key : ERROR - pack not installed ?")
+	EndIf
+
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -886,16 +960,19 @@ Func Create_autorun($drive_letter,$release_in_list)
 
 	$icon = "lili.ico"
 
-	IniWrite($drive_letter & "\autorun.inf", "autorun", "icon", $icon)
-	IniWrite($drive_letter & "\autorun.inf", "autorun", "open", "")
-	IniWrite($drive_letter & "\autorun.inf", "autorun", "label", "LinuxLive Key")
+	;Writing autorun to a temporary file to try to fix an odd bug (FS#304)
+	$temp_ini = @ScriptDir&"\tools"
+
+	IniWrite($temp_ini & "\autorun.inf", "autorun", "icon", $icon)
+	IniWrite($temp_ini & "\autorun.inf", "autorun", "open", "")
+	IniWrite($temp_ini & "\autorun.inf", "autorun", "label", "LinuxLive Key")
 
 	; If virtualbox is installed
 	if FileExists($drive_letter & "\VirtualBox\Virtualize_This_Key.exe") OR FileExists($drive_letter & "VirtualBox\VirtualBox.exe") OR GUICtrlRead($virtualbox) = $GUI_CHECKED Then
-		IniWrite($drive_letter & "\autorun.inf", "autorun", "shell\linuxlive", "----> LinuxLive!")
-		IniWrite($drive_letter & "\autorun.inf", "autorun", "shell\linuxlive\command", "VirtualBox\Virtualize_This_Key.exe")
-		IniWrite($drive_letter &"\autorun.inf", "autorun", "shell\linuxlive2", "----> VirtualBox Interface")
-		IniWrite($drive_letter & "\autorun.inf", "autorun", "shell\linuxlive2\command", "VirtualBox\VirtualBox.exe")
+		IniWrite($temp_ini & "\autorun.inf", "autorun", "shell\linuxlive", "----> LinuxLive!")
+		IniWrite($temp_ini & "\autorun.inf", "autorun", "shell\linuxlive\command", "VirtualBox\Virtualize_This_Key.exe")
+		IniWrite($temp_ini &"\autorun.inf", "autorun", "shell\linuxlive2", "----> VirtualBox Interface")
+		IniWrite($temp_ini & "\autorun.inf", "autorun", "shell\linuxlive2\command", "VirtualBox\VirtualBox.exe")
 	EndIf
 
 	$i=3
@@ -903,15 +980,18 @@ Func Create_autorun($drive_letter,$release_in_list)
 		for $file in $files_in_source
 			if get_extension($file) = "exe" Then
 				if $i=3 Then
-					IniWrite($drive_letter  & "\autorun.inf", "autorun", "shell\linuxlive"&$i, "----> CD Menu ("& $file &")")
+					IniWrite($temp_ini  & "\autorun.inf", "autorun", "shell\linuxlive"&$i, "----> CD Menu ("& $file &")")
 				Else
-					IniWrite($drive_letter  & "\autorun.inf", "autorun", "shell\linuxlive"&$i, "----> CD Menu ("& $file &")")
+					IniWrite($temp_ini  & "\autorun.inf", "autorun", "shell\linuxlive"&$i, "----> CD Menu ("& $file &")")
 				EndIf
-				IniWrite($drive_letter & "\autorun.inf", "autorun", "shell\linuxlive"&$i&"\command", $drive_letter&"\"&$file)
+				IniWrite($temp_ini & "\autorun.inf", "autorun", "shell\linuxlive"&$i&"\command", $drive_letter&"\"&$file)
 				$i=$i+1
 			EndIf
 		Next
 	EndIf
+
+	FileMove($temp_ini & "\autorun.inf",$drive_letter& "\autorun.inf")
+
 	SendReport("End-Create_autorun")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -938,6 +1018,8 @@ Func CreateUninstaller($drive_letter,$release_in_list)
 		SendReport("End-CreateUninstaller : list of files is not an array !")
 		return "ERROR"
 	EndIf
+
+	AddToSmartClean($drive_letter,$persistence_file)
 
 	AddToSmartClean($drive_letter,"lili.ico")
 	AddToSmartClean($drive_letter,"autorun.inf")
@@ -1049,10 +1131,15 @@ EndFunc   ;==>DeleteFilesInDir
 
 Func Setup_RAM_for_VM($drive_letter,$release_in_list)
 	SendReport("Start-Setup_RAM_for_VM")
-	$linuxlive_settings_file = $drive_letter&"\VirtualBox\Portable-VirtualBox\data\.VirtualBox\Machines\LinuxLive\LinuxLive.xml"
+	$linuxlive_settings_file = $drive_letter&"\VirtualBox\Portable-VirtualBox\data\.VirtualBox\Machines\LinuxLive\LinuxLive.vbox"
+
+	if Not FileExists($linuxlive_settings_file) Then
+		UpdateLog("End-Setup_RAM_for_VM : Warning, Could not automatically set RAM (File "&$linuxlive_settings_file&" does not exist)")
+	EndIf
+
     $file = FileOpen ($linuxlive_settings_file, 128)
 	if $file = -1 Then
-		UpdateLog("Error while opening for reading (mode 128)" &$drive_letter&"\VirtualBox\Portable-VirtualBox\data\.VirtualBox\Machines\LinuxLive\LinuxLive.xml" &@CRLF & "Cannot automatically set RAM")
+		UpdateLog("End-Setup_RAM_for_VM : Warning, Could not automatically set RAM (Unable to open file "&$linuxlive_settings_file&" in read mode )")
 		Return 0
 	EndIf
 	$line    = FileRead ($file)
@@ -1067,13 +1154,13 @@ Func Setup_RAM_for_VM($drive_letter,$release_in_list)
 		$new_line=StringReplace ($line, 'Memory RAMSize="' & $old_value[0] & '"', 'Memory RAMSize="' & $recommended_ram & '"')
 		$file = FileOpen ($linuxlive_settings_file, 2)
 		if $file = -1 Then
-			UpdateLog("Error while opening for writing (mode 2)" &$drive_letter&"\VirtualBox\Portable-VirtualBox\data\.VirtualBox\Machines\LinuxLive\LinuxLive.xml" &@CRLF & "Cannot automatically set RAM")
+			UpdateLog("End-Setup_RAM_for_VM : Warning, Could not automatically set RAM (Unable to open file "&$linuxlive_settings_file&" in write mode )")
 			Return 0
 		EndIf
 		FileWrite ($file, $new_line)
 		FileClose ($file)
 	EndIf
-	SendReport("End-Setup_RAM_for_VM")
+	SendReport("End-Setup_RAM_for_VM : RAM has been successfully set")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1095,7 +1182,7 @@ Func Final_check()
 	$mem = MemGetStats()
 
 	; If not enough RAM => WARNING
-	If Round($mem[2] / 1024) < $recommended_ram Then $avert_mem = Translate("Free memory is below the recommended value for your Linux to run in Windows") & "( "&$recommended_ram & Translate("MB")&" )" & @CRLF & Translate("This is not enough to launch LinuxLive in Windows.")
+	If Round($mem[2] / 1024) < $recommended_ram Then $avert_mem = Translate("Free memory is below the recommended value for your Linux to run in Windows") & "( "&$recommended_ram & Translate("MB")&" )" & @CRLF & Translate("This is not enough to launch LinuxLive in Windows")&"."
 
 	If $avert_mem <> "" Then MsgBox(64, Translate("Please read"), $avert_mem)
 	SendReport("End-Final_check : "&@CRLF&$avert_mem)

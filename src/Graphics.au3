@@ -291,6 +291,7 @@ EndFunc   ;==>_ProgressDelete
 ;===============================================================================
 ;
 Func _ProgressSetColors(ByRef $ID, $Col = -1, $GradCol = -1, $BG = -1, $GradBG = -1)
+
 	If Not IsArray($_Progress_Bars) Or UBound($_Progress_Bars, 2) <> 15 Or $ID > (UBound($_Progress_Bars)-1) Then Return SetError(1, 0, 0)
 	If Execute($Col) > -1 And Execute($GradCol) > -1 Then
 		_WinAPI_DeleteObject($_Progress_Bars[$ID][6])
@@ -309,6 +310,7 @@ Func _ProgressSetColors(ByRef $ID, $Col = -1, $GradCol = -1, $BG = -1, $GradBG =
 		$_Progress_Bars[$ID][14] = $_Progress_Bars[$ID][2]
 	EndIf
 ;~ 	_ProgressSet($ID, $_Progress_Bars[$ID][8])
+
 	Return SetError(@error, 0, @error = 0)
 EndFunc   ;==>_ProgressSetColors
 
@@ -557,10 +559,8 @@ Func _ProgressRefresh(ByRef $ID, $prc = Default)
 	EndIf
 ;~ 	_GDIPlus_GraphicsDrawString($_Progress_Bars[$ID][5],$prc & " %",Ceiling(($bar_width/2)-15),Ceiling(($bar_height/2)-5))
 	_GDIPlus_GraphicsDrawImage($_Progress_Bars[$ID][3], $_Progress_Bars[$ID][4], 0, 0)
-	GUISetState($GUI_SHOW, $GUI)
-	GUISetState($GUI_SHOW, $CONTROL_GUI)
-	;GUIRegisterMsg($WM_PAINT, "DrawAll")
-	;ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
+	GUIRegisterMsg($WM_PAINT, "DrawAll")
+	ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
 EndFunc   ;==>_ProgressRefresh
 
 ; Author(s):       Prog@ndy
@@ -599,7 +599,6 @@ Func _ProgressRefreshMarquee(ByRef $ID, $prc = Default)
 	EndIf
 ;~ 	_GDIPlus_GraphicsDrawString($_Progress_Bars[$ID][5],$prc & " %",Ceiling(($bar_width/2)-15),Ceiling(($bar_height/2)-5))
 	_GDIPlus_GraphicsDrawImage($_Progress_Bars[$ID][3], $_Progress_Bars[$ID][4], 0, 0)
-
 EndFunc   ;==>_ProgressRefreshMarquee
 
 
@@ -726,9 +725,11 @@ EndFunc   ;==>_CreateGradientImg
 #Region Internal
 
 Func _Paint_Bars_Procedure2()
+	AdlibUnRegister("Control_Hover")
 	For $i = 1 To UBound($_Progress_Bars) - 1
 		If Not ($_Progress_Bars[$i][0] = -1) Then _ProgressRefresh($i)
 	Next
+	AdlibRegister("Control_Hover", 150)
 EndFunc   ;==>_Paint_Bars_Procedure
 
 

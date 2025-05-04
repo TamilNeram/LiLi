@@ -129,23 +129,25 @@ EndFunc   ;==>_FileCopy2
 
 Func GetPreviousInstallSizeMB($drive_letter)
 	SendReport("Start-GetPreviousInstallSizeMB for drive "&$drive_letter)
-	Local $array,$array2
+	Local $array,$array2,$chrono=TimerInit()
 	if FileExists($drive_letter&"\"&$autoclean_settings) Then
 		$array=IniReadSection($drive_letter&"\"&$autoclean_settings,"Files")
 		$total=0
 		if Ubound($array) > 1 Then
 			for $i=1 To Ubound($array)-1
-				$total+=FileGetSize($drive_letter&"\"&$array[$i][0])
+				$total+=IniRead($drive_letter&"\"&$autoclean_settings,"Files",$array[$i][0],"0")
+				; Real size is too long to be computed  FileGetSize($drive_letter&"\"&$array[$i][0])
 			Next
 		EndIf
 
 		$array2=IniReadSection($drive_letter&"\"&$autoclean_settings,"Folders")
 		if Ubound($array2) > 1 Then
 			for $i=1 To Ubound($array2)-1
-				$total+=DirGetSize($drive_letter&"\"&$array2[$i][0]&"\")
+				$total+=IniRead($drive_letter&"\"&$autoclean_settings,"Folders",$array2[$i][0],"0")
+				; Real size is too long to be computed DirGetSize($drive_letter&"\"&$array2[$i][0]&"\")
 			Next
 		EndIf
-		SendReport("End-GetPreviousInstallSizeMB ( Previous install : "&Round($total/(1024*1024),1)& " MB")
+		SendReport("End-GetPreviousInstallSizeMB ( Previous install : "&Round($total/(1024*1024),1)& " MB computed in "&Round(TimerDiff($chrono)/1000,1)&"sec) ")
 		Return Round($total/(1024*1024),0)
 	Else
 		Return 0
@@ -248,3 +250,103 @@ Func InitializeFilesInCD($searchdir)
 	_ArrayDelete($files, 0)
 	$files_in_source = $files
 EndFunc   ;==>InitializeFilesInCD
+
+Func AutoDetectSyslinuxVersion($drive_letter)
+	if FileExists($drive_letter&"\boot\syslinux\syslinux.bin") Then
+		$isolinux_bin = $drive_letter&"\boot\syslinux\syslinux.bin"
+	ElseIf FileExists($drive_letter&"\syslinux\syslinux.bin") Then
+		$isolinux_bin = $drive_letter&"\syslinux\syslinux.bin"
+	ElseIf FileExists($drive_letter&"\isolinux\syslinux.bin") Then
+		$isolinux_bin = $drive_letter&"\isolinux\syslinux.bin"
+	ElseIf FileExists($drive_letter&"\boot\isolinux\syslinux.bin") Then
+		$isolinux_bin = $drive_letter&"\boot\isolinux\syslinux.bin"
+	ElseIf FileExists($drive_letter&"\syslinux.bin") Then
+		$isolinux_bin = $drive_letter&"\syslinux.bin"
+	Elseif FileExists($drive_letter&"\boot\syslinux\isolinux.bin") Then
+		$isolinux_bin = $drive_letter&"\boot\syslinux\isolinux.bin"
+	ElseIf FileExists($drive_letter&"\syslinux\isolinux.bin") Then
+		$isolinux_bin = $drive_letter&"\syslinux\isolinux.bin"
+	ElseIf FileExists($drive_letter&"\isolinux\isolinux.bin") Then
+		$isolinux_bin = $drive_letter&"\isolinux\isolinux.bin"
+	ElseIf FileExists($drive_letter&"\boot\isolinux\isolinux.bin") Then
+		$isolinux_bin = $drive_letter&"\boot\isolinux\isolinux.bin"
+	ElseIf FileExists($drive_letter&"\isolinux.bin") Then
+		$isolinux_bin = $drive_letter&"\isolinux.bin"
+	Else
+		UpdateLog("Could not detect syslinux version (no isolinux.bin or syslinux.bin found)")
+		Return -1
+	EndIf
+	Return DetectSyslinuxVersionInBin($isolinux_bin)
+EndFunc
+
+
+Func DetectSyslinuxVersionInBin($file)
+	If StringInStr($file,"syslinux.bin") Then
+		$detection_mode = "SYSLINUX"
+	Else
+		$detection_mode = "ISOLINUX"
+	EndIf
+
+	$filehandle = FileOpen($file)
+	If $filehandle = -1 Then
+		UpdateLog("Could not open syslinux.bin to detect syslinux version")
+		Return -1
+	EndIf
+	$content = FileRead($filehandle)
+	FileClose($filehandle)
+
+	$match = StringRegExp($content, '(?i)'&$detection_mode&'.(\d)\.(\d*)\s', 2)
+	If @error=0 AND Ubound($match)=3 Then
+		$major_revision=$match[1]
+		$minor_revision=$match[2]
+		UpdateLog("Syslinux "&$major_revision&"."&$minor_revision&" detected in file "&$file)
+		Return $major_revision
+	Else
+		UpdateLog("Syslinux version could not be detected in file "&$file)
+		Return 0
+	EndIf
+EndFunc
+
+Func DetectSyslinuxVersionInBinold($file)
+	$filehandle = FileOpen($file, 16)
+	If $filehandle = -1 Then
+		UpdateLog("Could not open syslinux.bin to detect syslinux version")
+		Return -1
+	EndIf
+	$content = FileRead($filehandle)
+	FileClose($filehandle)
+
+	if StringInStr($content,"49534F4C494E555820342E",2)>0 Then
+		UpdateLog("Syslinux 4.X detected in file "&$file)
+		Return 4
+	Elseif StringInStr($content,"49534F4C494E555820332E",2)>0 Then
+		UpdateLog("Syslinux 3.X detected in file "&$file)
+		Return 3
+	Elseif StringInStr($content,"49534F4C494E555820322E",2)>0 Then
+		UpdateLog("Syslinux 2.X detected in file "&$file)
+		Return 2
+	Elseif StringInStr($content,"49534F4C494E555820312E",2)>0 Then
+		UpdateLog("Syslinux 1.X detected in file "&$file)
+		Return 2
+	Else
+		UpdateLog("Syslinux version could not be detected in file "&$file)
+		Return 0
+	EndIf
+EndFunc
+
+Func CleanFilename($filename_to_clean)
+	$filename_to_clean = StringRegExpReplace($filename_to_clean, '(?i)\(.\)|\[.\]',"")
+	$filename_to_clean = StringRegExpReplace($filename_to_clean, "(?i)\s*\.iso",".iso")
+	$filename_to_clean = StringRegExpReplace($filename_to_clean, "(?i)\s*-\s*Cópia|"&"\s*-\s*Copie|"&"\s*-\s*Copy|"&"\s*-\s*Kopie|"&"\s*-\s*Copia|"&"\s*-\s*êîïèÿ","")
+	return $filename_to_clean
+EndFunc
+
+Func FileOverWrite($filename,$content)
+	$file = FileOpen($filename, 2)
+	If $file = -1 Then
+		SendReport("Could not overwrite file "&$filename)
+		return -1
+	EndIf
+	FileWrite($file,$content)
+	FileClose($file)
+EndFunc

@@ -6,11 +6,12 @@ Global $proxy_modes[3],$proxy_status,$available_languages[50]
 
 Global $check_for_updates,$stable_only,$all_release,$hTreeView,$treeview_items
 
-Global $automatic_recognition,$force_install_parameters,$combo_use_setting
+Global $tab_options,$automatic_recognition,$force_install_parameters,$combo_use_setting,$force_default_mode
 
 Func GUI_Options_Menu()
 	Opt("GUIOnEventMode", 0)
 	$main_menu = GUICreate(Translate("Options"), 401, 436, -1, -1,-1, -1,$CONTROL_GUI)
+	GUISetFont($font_size)
 	$ok_button = GUICtrlCreateButton(Translate("OK"), 304, 408, 81, 23)
 	$Tabs = GUICtrlCreateTab(8, 8, 385, 393)
 	GUICtrlSetResizing(-1, $GUI_DOCKWIDTH+$GUI_DOCKHEIGHT)
@@ -24,20 +25,21 @@ Func GUI_Options_Menu()
 	GUICtrlCreateGroup("", -99, -99, 1, 1)
 	$donate = GUICtrlCreateButton(Translate("Make a donation"), 32, 319, 153, 33, $WS_GROUP)
 	$contact = GUICtrlCreateButton(Translate("Contact me"), 212, 319, 153, 33, $WS_GROUP)
-	$copyright = GUICtrlCreateLabel(Translate("CopyLeft by")&" Thibaut Lauzière - ",  84, 380, 200, 17)
-	$licence=GUICtrlCreateLabel(Translate("GPL v3 License"), 236, 379, 360, 17)
-	GUICtrlSetFont(-1,-1,-1,4)
+	$copyright = GUICtrlCreateLabel(Translate("CopyLeft by")&" Thibaut Lauzière - ",  15, 380, 185, 17,$SS_RIGHT)
+	$licence=GUICtrlCreateLabel(Translate("GPL v3 License"), 206, 379, 360, 17)
+	;GUICtrlSetFont(-1,-1,-1,4)
 	GUICtrlSetColor(-1,0x0000cc)
-	GUICtrlSetCursor(-1,0)
+	GUICtrlSetCursor(-1,4)
 
 	$tab_options = GUICtrlCreateTabItem(Translate("Options"))
 
-	$Group3 = GUICtrlCreateGroup(Translate("Install parameters"), 24, 48, 353, 129)
+	$Group3 = GUICtrlCreateGroup(Translate("Install parameters"), 24, 48, 353, 160)
 
 	$automatic_recognition = GUICtrlCreateRadio(Translate("Use LiLi automatic recognition")&" ("&Translate("highly recommended")&")", 44, 72, 330, 17)
-	$force_install_parameters = GUICtrlCreateRadio(Translate("Force using same parameters as")&" :", 44, 104, 265, 17)
-	$combo_use_setting = GUICtrlCreateCombo(">> " & Translate("Select a Linux"), 88, 136, 250, -1, BitOR($CBS_DROPDOWNLIST, $WS_VSCROLL))
-	GUICtrlSetData($combo_use_setting, $prefetched_linux_list)
+	$force_default_mode = GUICtrlCreateRadio(Translate("Force using default mode (works with most Linuxes)"), 44, 104, 265, 17)
+	$force_install_parameters = GUICtrlCreateRadio(Translate("Force using same parameters as")&" :", 44, 136, 265, 17)
+	$combo_use_setting = GUICtrlCreateCombo("", 88, 168, 250, -1, BitOR($CBS_DROPDOWNLIST, $WS_VSCROLL))
+	GUICtrlSetData($combo_use_setting, ">> " & Translate("Select a Linux")&$prefetched_linux_list_full)
 	UpdateRecognition()
 
 	$tab_language = GUICtrlCreateTabItem(Translate("Language"))
@@ -80,19 +82,19 @@ Func GUI_Options_Menu()
 
 	$label_proxy_url = GUICtrlCreateLabel(Translate("Proxy URL")&" : ", 30, 173, 110, 21, $WS_GROUP+$SS_RIGHT)
 
-	$proxy_url_input = GUICtrlCreateInput(ReadSetting( "Proxy", "proxy_url"), 150, 170, 217, 22, $WS_GROUP)
+	$proxy_url_input = GUICtrlCreateInput(ReadSetting( "Proxy", "proxy_url"), 150, 170, 217, 22, $WS_GROUP+$ES_AUTOHSCROLL)
 
 	$label_proxy_port = GUICtrlCreateLabel(Translate("Port")&" : ", 30, 206, 110, 21, $WS_GROUP+$SS_RIGHT)
 
-	$proxy_port_input = GUICtrlCreateInput(ReadSetting( "Proxy", "proxy_port"), 150, 203, 49, 22, $WS_GROUP+$ES_NUMBER)
+	$proxy_port_input = GUICtrlCreateInput(ReadSetting( "Proxy", "proxy_port"), 150, 203, 49, 22, $WS_GROUP+$ES_NUMBER+$ES_AUTOHSCROLL)
 
 	$label_proxy_user = GUICtrlCreateLabel(Translate("Username")&" : ", 30, 236, 110, 21, $WS_GROUP+$SS_RIGHT)
 
-	$proxy_username_input = GUICtrlCreateInput(ReadSetting( "Proxy", "proxy_username"), 150, 233, 160, 22, $WS_GROUP)
+	$proxy_username_input = GUICtrlCreateInput(ReadSetting( "Proxy", "proxy_username"), 150, 233, 160, 22, $WS_GROUP+$ES_AUTOHSCROLL)
 
 	$label_proxy_password = GUICtrlCreateLabel(Translate("Password")&" : ", 30, 272, 110, 21, $WS_GROUP+$SS_RIGHT)
 
-	$proxy_password_input = GUICtrlCreateInput(ReadSetting( "Proxy", "proxy_password"), 150, 269, 160, 22, $WS_GROUP+$ES_PASSWORD)
+	$proxy_password_input = GUICtrlCreateInput(ReadSetting( "Proxy", "proxy_password"), 150, 269, 160, 22, $WS_GROUP+$ES_PASSWORD+$ES_AUTOHSCROLL)
 
 
 	$group_status = GUICtrlCreateGroup(Translate("Status"), 22, 323, 353, 65)
@@ -134,7 +136,7 @@ Func GUI_Options_Menu()
 	InitUpdateTab()
 
 
-	$tab_options = GUICtrlCreateTabItem(Translate("Advanced"))
+	$tab_advanced = GUICtrlCreateTabItem(Translate("Advanced"))
 	$label_warning = GUICtrlCreateLabel(Translate("Do not modify these options unless you know what you are doing")&" !",20, 43, 350, 30)
 	GUICtrlSetColor($label_warning,0xAA0000)
 	;Display_Options()
@@ -149,8 +151,9 @@ Func GUI_Options_Menu()
 
 	;-----------------------
 
-	;$tab_help = GUICtrlCreateTabItem("Help")
-	;GUICtrlCreateTabItem("")
+	;$tab_help = GUICtrlCreateTabItem(Translate("Help")°
+
+	GUICtrlCreateTabItem("")
 
 	;$tab_credits = GUICtrlCreateTabItem("Credits")
 	;GUICtrlCreateTabItem("")
@@ -171,26 +174,30 @@ Func GUI_Options_Menu()
 		Switch $nMsg
 			Case $GUI_EVENT_CLOSE
 				WriteAdvancedSettings()
-				Opt("GUIOnEventMode", 1)
-				GUIDelete($main_menu)
-				AdlibRegister("Control_Hover", 150)
-				GUISetState(@SW_ENABLE, $CONTROL_GUI)
-				ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
-				GUISwitch($CONTROL_GUI)
-				Return ""
+				if CheckCustomRecognition() Then
+					Opt("GUIOnEventMode", 1)
+					GUIDelete($main_menu)
+					AdlibRegister("Control_Hover", 150)
+					GUISetState(@SW_ENABLE, $CONTROL_GUI)
+					ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
+					GUISwitch($CONTROL_GUI)
+					Return ""
+				EndIf
 			Case $ok_button
 				WriteAdvancedSettings()
-				Opt("GUIOnEventMode", 1)
-				GUIDelete($main_menu)
-				AdlibRegister("Control_Hover", 150)
-				GUISetState(@SW_ENABLE, $CONTROL_GUI)
-				ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
-				GUISwitch($CONTROL_GUI)
-				Return ""
+				if CheckCustomRecognition() Then
+					Opt("GUIOnEventMode", 1)
+					GUIDelete($main_menu)
+					AdlibRegister("Control_Hover", 150)
+					GUISetState(@SW_ENABLE, $CONTROL_GUI)
+					ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
+					GUISwitch($CONTROL_GUI)
+					Return ""
+				EndIf
 			Case $contact
-				ShellExecute("http://www.linuxliveusb.com/contact-me")
+				ShellExecute("http://www.linuxliveusb.com/contact")
 			Case $licence
-				ShellExecute("http://www.linuxliveusb.com/license")
+				ShellExecute("http://www.linuxliveusb.com/about/license")
 			Case $donate
 				ShellExecute("https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=8297661")
 			Case $language_list
@@ -277,40 +284,61 @@ Func GUI_Options_Menu()
 			Case $automatic_recognition
 				WriteSetting("Install_Parameters","automatic_recognition","yes")
 				UpdateRecognition()
+			Case $force_default_mode
+				WriteSetting("Install_Parameters","automatic_recognition","no")
+				WriteSetting("Install_Parameters","use_same_parameter_as","Regular Linux (works with most linuxes)")
+				UpdateRecognition()
 			Case $force_install_parameters
 				WriteSetting("Install_Parameters","automatic_recognition","no")
+				WriteSetting("Install_Parameters","use_same_parameter_as","")
 				UpdateRecognition()
 			Case $combo_use_setting
-				$forced_linux_selected=GUICtrlRead($combo_use_setting)
-				If StringInStr($forced_linux_selected, ">>") = 0 Then
-					WriteSetting("Install_Parameters","use_same_parameter_as",$forced_linux_selected)
-					UpdateRecognition()
-				Else
-					WriteSetting("Install_Parameters","use_same_parameter_as","")
-					MsgBox(48, Translate("Please read"), Translate("Please select a linux to continue"))
-				EndIf
-
+				CheckCustomRecognition()
 		EndSwitch
 		Sleep(10)
 	WEnd
 	GUIDelete($main_menu)
 EndFunc
 
-Func UpdateRecognition()
 
-	If ReadSetting("Install_Parameters","automatic_recognition")<>"no" Then
+Func CheckCustomRecognition()
+	If ReadSetting("Install_Parameters","automatic_recognition")="no" AND ReadSetting("Install_Parameters","use_same_parameter_as")<>"Regular Linux (works with most linuxes)" Then
+		$forced_linux_selected=GUICtrlRead($combo_use_setting)
+		If StringInStr($forced_linux_selected, ">>") = 0 Then
+			WriteSetting("Install_Parameters","use_same_parameter_as",$forced_linux_selected)
+			UpdateRecognition()
+			Return 1
+		Else
+			WriteSetting("Install_Parameters","use_same_parameter_as","")
+			GUICtrlSetState($tab_options,$GUI_SHOW)
+			MsgBox(48, Translate("Please read"), Translate("Please select a linux to continue"))
+			Return 0
+		EndIf
+	Else
+		Return 1
+	EndIf
+EndFunc
+
+Func UpdateRecognition()
+	If ReadSetting("Install_Parameters","automatic_recognition")="no" Then
+		if ReadSetting("Install_Parameters","use_same_parameter_as")<>"Regular Linux (works with most linuxes)" Then
+			GUICtrlSetState($force_install_parameters,$GUI_CHECKED)
+			GUICtrlSetState($combo_use_setting,$GUI_ENABLE)
+				if ReadSetting("Install_Parameters","use_same_parameter_as") Then
+					GUICtrlSetData($combo_use_setting,ReadSetting("Install_Parameters","use_same_parameter_as"))
+				Else
+					GUICtrlSetData($combo_use_setting,">> " & Translate("Select a Linux"))
+				EndIf
+		Else
+			GUICtrlSetState($force_default_mode,$GUI_CHECKED)
+			GUICtrlSetState($combo_use_setting,$GUI_DISABLE)
+		EndIf
+	Else
 		GUICtrlSetState($automatic_recognition,$GUI_CHECKED)
 		GUICtrlSetState($combo_use_setting,$GUI_DISABLE)
-	Else
-		GUICtrlSetState($force_install_parameters,$GUI_CHECKED)
-		GUICtrlSetState($combo_use_setting,$GUI_ENABLE)
 	EndIf
 
-	if ReadSetting("Install_Parameters","use_same_parameter_as") Then
-		GUICtrlSetData($combo_use_setting,ReadSetting("Install_Parameters","use_same_parameter_as"))
-	Else
-		GUICtrlSetData($combo_use_setting,">> " & Translate("Select a Linux"))
-	EndIf
+
 EndFunc
 
 Func WriteAdvancedSettings()
@@ -441,7 +469,7 @@ EndFunc
 Func OnlineStatus()
 	GUICtrlSetColor($proxy_status,0xFF9104)
 	GUICtrlSetData($proxy_status,Translate("Testing"))
-	$inet = InetGet("http://www.google.com", @TempDir & "\connectivity-test.tmp",1,0)
+	$inet = InetGet("http://www.google.com", @TempDir & "\connectivity-test.tmp",3,0)
     If @error OR $inet=0 Then
 		return 0
     Else

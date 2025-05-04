@@ -64,6 +64,7 @@ Func _Language()
 	$force_lang = ReadSetting("General", "force_lang")
 	If $force_lang <> "" And (FileExists($lang_folder & $force_lang & ".ini") Or $force_lang = "English") Then
 		$lang_ini = $lang_folder & $force_lang & ".ini"
+		$font_size=IniRead($lang_ini,$force_lang,"font_size",$font_size)
 		SendReport("End-_Language (Force Lang=" & $force_lang & ")")
 		Return $force_lang
 	EndIf
@@ -103,10 +104,13 @@ Func _Language()
 			$lang_found = "Russian"
 		Case StringInStr("0413,0813", $use_source)
 			$lang_found = "Dutch"
+		Case StringInStr("0421", $use_source)
+			$lang_found = "Indonesian"
 		Case Else
 			$lang_found = "English"
 	EndSelect
 	$lang_ini = $lang_folder & $lang_found & ".ini"
+	$font_size=IniRead($lang_ini,$lang_found,"font_size",$font_size)
 	SendReport("End-_Language " & $lang_found)
 	Return $lang_found
 EndFunc   ;==>_Language

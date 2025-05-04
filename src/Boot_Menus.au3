@@ -172,22 +172,33 @@ Func Default_WriteTextCFG($selected_drive)
 	SendReport("Start-Default_WriteTextCFG ( Drive : " & $selected_drive & " )")
 	Local $uuid
 
-	$file = FileOpen($selected_drive & "\boot\syslinux\syslinux.cfg", 0)
+	if FileExists($selected_drive & "\boot\syslinux\syslinux.cfg") Then
+		$syslinux_file = $selected_drive & "\boot\syslinux\syslinux.cfg"
+	Elseif FileExists($selected_drive & "\syslinux\syslinux.cfg") Then
+		$syslinux_file = $selected_drive & "\syslinux\syslinux.cfg"
+	Elseif FileExists($selected_drive & "\syslinux.cfg") Then
+		$syslinux_file = $selected_drive & "\syslinux.cfg"
+	Else
+		Return 0
+	EndIf
+
+	$file = FileOpen($syslinux_file, 0)
 	If $file = -1 Then
 		SendReport("End-Default_WriteTextCFG : could not open syslinux.cfg")
-		Return ""
+		Return 0
 	EndIf
+
 	$content=FileRead($file)
 	FileClose($file)
 
-	; Modifying Boot menu for ArchLinux only
+	; Modifying Boot menu for ArchLinux
 	; setting boot device UUID
 	$array1 = _StringBetween($content, 'archisolabel=', ' ')
 	if NOT @error Then
 		SendReport("IN-Default_WriteTextCFG => ArchLinux detected")
 		$uuid = Get_Disk_UUID($selected_drive)
 		$new_content=StringReplace($content,'archisolabel='&$array1[0],"archisodevice=/dev/disk/by-uuid/"&$uuid)
-		$file = FileOpen($selected_drive & "\boot\syslinux\syslinux.cfg", 2)
+		$file = FileOpen($syslinux_file, 2)
 		; Check if file opened for writing OK
 		If $file = -1 Then
 			SendReport("IN-Default_WriteTextCFG => ERROR : cannot write to syslinux.cfg")
@@ -197,6 +208,39 @@ Func Default_WriteTextCFG($selected_drive)
 			FileClose($file)
 		EndIf
 	EndIf
+
+	; Modifying Boot menu for Gentoo/Sabayo
+	; changing root type from UDF (DVD) to vfat (USB)
+
+	if StringInStr($content,"cdroot_type=udf" )>0 Then
+		SendReport("IN-Default_WriteTextCFG => Gentoo/Sabayon variant detected")
+		$file = FileOpen($syslinux_file, 2)
+		; Check if file opened for writing OK
+		If $file = -1 Then
+			SendReport("IN-Default_WriteTextCFG => ERROR : cannot write to syslinux.cfg")
+		Else
+			SendReport("IN-Default_WriteTextCFG => setting cdroot_type=vfat slowusb ")
+			FileWrite($file,StringReplace($content,"cdroot_type=udf","cdroot_type=vfat slowusb"))
+			FileClose($file)
+		EndIf
+	EndIf
+
+	; Modifying Boot menu for Puppy Variants
+	; changing media from CD to USB
+
+	if StringInStr($content,"pmedia=cd" )>0 Then
+		SendReport("IN-Default_WriteTextCFG => Puppy variant detected")
+		$file = FileOpen($syslinux_file, 2)
+		; Check if file opened for writing OK
+		If $file = -1 Then
+			SendReport("IN-Default_WriteTextCFG => ERROR : cannot write to syslinux.cfg")
+		Else
+			SendReport("IN-Default_WriteTextCFG => setting pmedia=usb")
+			FileWrite($file,StringReplace($content,"pmedia=cd","pmedia=usb"))
+			FileClose($file)
+		EndIf
+	EndIf
+
 	SendReport("End-Default_WriteTextCFG")
 EndFunc
 
@@ -234,7 +278,7 @@ Func Ubuntu_WriteTextCFG($selected_drive, $release_in_list)
 	If $ubuntu_variant = "mint" Then
 
 		; Mint KDE uses a splash.png image
-		if StringInStr($codename,"mintkde") Then
+		if StringInStr($codename,"mintkde") AND $distrib_version = 9 Then
 			$splash_img="splash.png"
 		Else
 			$splash_img="splash.jpg"
@@ -257,11 +301,8 @@ Func Ubuntu_WriteTextCFG($selected_drive, $release_in_list)
 				 & @LF & "menu hidden" _
 				 & @LF & "menu hiddenrow 5"
 
-		if StringInStr($codename,"mintdebian") Then
-			$boot_text &= Debian_BootMenu("mint")
-		Else
-			$boot_text &= Ubuntu_BootMenu($initrd_file,"mint")
-		EndIf
+		$boot_text &= Ubuntu_BootMenu($initrd_file,"mint")
+
 		UpdateLog("Creating syslinux.cfg file for Mint :" & @CRLF & $boot_text)
 		$file = FileOpen($selected_drive & "\syslinux\syslinux.cfg", 2)
 		FileWrite($file, $boot_text)
@@ -277,7 +318,7 @@ Func Ubuntu_WriteTextCFG($selected_drive, $release_in_list)
 		FileWrite($file, $boot_text)
 		FileClose($file)
 		FileCopy($selected_drive & "\syslinux\isolinux.txt",$selected_drive & "\syslinux\isolinux-orig.txt")
-		FileCopy(@ScriptDir & "\tools\"&$ubuntu_variant&"-isolinux.txt", $selected_drive & "\syslinux\isolinux.txt", 1)
+		FileCopy(@ScriptDir & "\tools\boot-menus\"&$ubuntu_variant&"-isolinux.txt", $selected_drive & "\syslinux\isolinux.txt", 1)
 		SendReport("End-Ubuntu_WriteTextCFG")
 		Return 1
 	EndIf
@@ -326,12 +367,63 @@ Func Ubuntu_WriteTextCFG($selected_drive, $release_in_list)
 	Else
 		$text_file="text.cfg"
 	EndIf
+	SendReport("IN-Ubuntu_WriteTextCFG : writing to "&$text_file)
 
 	$file = FileOpen($selected_drive & "\syslinux\"&$text_file, 2)
 	FileWrite($file, $boot_text)
 	FileClose($file)
 	SendReport("End-Ubuntu_WriteTextCFG")
 EndFunc   ;==>Ubuntu_WriteTextCFG
+
+
+Func Debian_WriteTextCFG($selected_drive, $release_in_list)
+	SendReport("Start-Debian_WriteTextCFG (Drive : " & $selected_drive & " -  Codename: " & ReleaseGetCodename($release_in_list) & " )")
+	$variant = ReleaseGetVariant($release_in_list)
+	$distrib_version = ReleaseGetDistributionVersion($release_in_list)
+	$features = ReleaseGetSupportedFeatures($release_in_list)
+	$codename = ReleaseGetCodename($release_in_list)
+
+	If $variant="mint" Then
+			$boot_text = "default vesamenu.c32" _
+				 & @LF & "timeout 100" _
+				 & @LF & "menu background splash.jpg" _
+				 & @LF & "menu title Welcome to Linux Mint Debian" _
+				 & @LF & "menu color border 0 #00eeeeee #00000000" _
+				 & @LF & "menu color sel 7 #ffffffff #33eeeeee" _
+				 & @LF & "menu color title 0 #ffeeeeee #00000000" _
+				 & @LF & "menu color tabmsg 0 #ffeeeeee #00000000" _
+				 & @LF & "menu color unsel 0 #ffeeeeee #00000000" _
+				 & @LF & "menu color hotsel 0 #ff000000 #ffffffff" _
+				 & @LF & "menu color hotkey 7 #ffffffff #ff000000" _
+				 & @LF & "menu color timeout_msg 0 #ffffffff #00000000" _
+				 & @LF & "menu color timeout 0 #ffffffff #00000000" _
+				 & @LF & "menu color cmdline 0 #ffffffff #00000000" _
+				 & @LF & "menu hidden" _
+				 & @LF & "menu hiddenrow 6"
+
+		$boot_text &= Debian_BootMenu("mint")
+
+		UpdateLog("Creating syslinux.cfg file for Mint :" & @CRLF & $boot_text)
+		$file = FileOpen($selected_drive & "\syslinux\syslinux.cfg", 2)
+		FileWrite($file, $boot_text)
+		FileClose($file)
+	Else
+		Local $kbd_code,$boot_text="",$append_debian="",$prepend="",$boot_menu=""
+		$append_debian="boot=live initrd=/casper/initrd.lz live-media-path=/casper quiet splash --"
+		If FileExists($selected_drive&"\live-rw") Then
+			$prepend = @LF& "label persist" & @LF & "menu label ^Persistent" _
+				& @LF & "  kernel /live/vmlinuz" _
+				& @LF & "  append initrd=/live/initrd.img boot=live config persistent quiet"
+			EndIf
+
+		$boot_menu=FileRead($selected_drive & "\syslinux\live.cfg")
+		FileMove($selected_drive & "\syslinux\live.cfg",$selected_drive & "\syslinux\live-orig.cfg")
+		FileWrite($selected_drive & "\syslinux\live.cfg",$prepend& @LF & @LF &$boot_menu)
+
+		UpdateLog("Creating live.cfg file for Debian :" &@CRLF& $prepend& @LF & @LF &$boot_menu)
+	EndIf
+	SendReport("End-Debian_WriteTextCFG")
+EndFunc
 
 Func AutomaticPreseed($selected_drive,$preseed_variant)
 	SendReport("Start-AutomaticPreseed( "& $selected_drive&" , "& $preseed_variant&" )")
@@ -560,6 +652,54 @@ Func Mandriva_WriteTextCFG($drive_letter)
 	SendReport("End-Mandriva_WriteTextCFG")
 EndFunc   ;==>Mandriva_WriteTextCFG
 
+Func Crunchbang_WriteTextCFG($selected_drive,$release_in_list)
+	UpdateLog("Start-Crunchbang_WriteTextCFG : Creating live.cfg file for Crunchbang")
+	$features = ReleaseGetSupportedFeatures($release_in_list)
+
+	If StringInStr($features,"debian-persistence") Then
+		$prepend = "label persist" _
+		& @LF & "menu label Persistent" _
+		& @LF & "kernel /live/vmlinuz1" _
+		& @LF & "append initrd=/live/initrd1.img boot=live config live-config.hostname=crunchbang live-config.username=crunchbang live-config.user-fullname=CrunchBangLiveUser live-config.locales=en_GB.UTF-8 live-config.timezone=Europe/London persistent quiet"
+
+		; read original boot menu
+		$original_boot=FileRead($selected_drive & "\syslinux\live.cfg")
+
+		; Backup original boot menu
+		FileMove($selected_drive & "\syslinux\live.cfg",$selected_drive & "\syslinux\live.cfg-orig")
+
+		; Append Persistence if necessary
+		FileWrite($selected_drive & "\syslinux\live.cfg",$prepend& @LF & @LF &$original_boot)
+	EndIf
+	SendReport("End-Crunchbang_WriteTextCFG")
+EndFunc
+
+Func XBMC_WriteTextCFG($selected_drive,$release_in_list)
+	UpdateLog("Start-XBMC_WriteTextCFG : Creating live.cfg file for Crunchbang")
+	$features = ReleaseGetSupportedFeatures($release_in_list)
+
+
+	$prepend = "default 0" _
+		& @LF & "timeout 30" _
+		& @LF & "foreground e3e3e3" _
+		& @LF & "background 303030"
+
+
+	If StringInStr($features,"debian-persistence") Then
+		$prepend &= @LF & @LF & "title XBMCLive Persistent" _
+			& @LF & "kernel /live/vmlinuz video=vesafb boot=live persistent xbmc=autostart,nodiskmount splash quiet loglevel=0 persistent quickreboot quickusbmodules notimezone noaccessibility noapparmor noaptcdrom noautologin noxautologin noconsolekeyboard nofastboot nognomepanel nohosts nokpersonalizer nolanguageselector nolocales nonetworking nopowermanagement noprogramcrashes nojockey nosudo noupdatenotifier nouser nopolkitconf noxautoconfig noxscreensaver nopreseed union=aufs" _
+			& @LF & "initrd /live/initrd.img"
+
+		; Default to Live (non persistent)
+		$prepend = StringReplace($prepend,"default 0","default 1")
+	EndIf
+
+	$boot_menu=FileRead(@ScriptDir & "\tools\boot-menus\xbmc-menu.lst")
+	FileWrite($selected_drive & "\boot\grub\menu.lst",$prepend& @LF & @LF &$boot_menu)
+
+	SendReport("End-XBMC_WriteTextCFG")
+EndFunc
+
 Func Set_OpenSuse_MBR_ID($drive_letter)
 	SendReport("Start-Set_OpenSuse_MBR_ID ( Drive : " & $drive_letter & " )")
 	Local $mbr_id = "0x"&Get_MBR_ID($drive_letter)
@@ -572,6 +712,6 @@ Func Set_OpenSuse_MBR_ID($drive_letter)
 		Return "ERROR"
 	EndIf
 	FileWrite($drive_letter&"\boot\grub\mbrid",$mbr_id)
-	SendReport("Stop-Set_OpenSuse_MBR_ID : Successfully set MBR ID file to "&$mbr_id)
+	SendReport("End-Set_OpenSuse_MBR_ID : Successfully set MBR ID file to "&$mbr_id)
 EndFunc
 
