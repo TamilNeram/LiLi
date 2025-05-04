@@ -1,38 +1,40 @@
 #NoTrayIcon
+#RequireAdmin
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
-#AutoIt3Wrapper_Icon=tools\img\lili.ico
+#AutoIt3Wrapper_icon=tools\img\lili.ico
 #AutoIt3Wrapper_Compression=3
+#AutoIt3Wrapper_UseUpx=n
 #AutoIt3Wrapper_Res_Comment=Enjoy !
 #AutoIt3Wrapper_Res_Description=Easily create a Linux Live USB
-#AutoIt3Wrapper_Res_Fileversion=2.1.88.18
-#AutoIt3Wrapper_Res_FileVersion_AutoIncrement=Y
+#AutoIt3Wrapper_Res_Fileversion=2.2.88.28
+#AutoIt3Wrapper_Res_Fileversion_AutoIncrement=Y
 #AutoIt3Wrapper_Res_LegalCopyright=CopyLeft Thibaut Lauziere a.k.a Slÿm
-#AutoIt3Wrapper_Res_Field=AutoIt Version|%AutoItVer%
 #AutoIt3Wrapper_Res_SaveSource=y
-#AutoIt3Wrapper_Version=P
+#AutoIt3Wrapper_Res_Field=AutoIt Version|%AutoItVer%
 #AutoIt3Wrapper_Res_Field=Site|http://www.linuxliveusb.com
-#AutoIt3Wrapper_Au3Check_Parameters=-w 4
+#AutoIt3Wrapper_AU3Check_Parameters=-w 4
 #AutoIt3Wrapper_Run_After=upx.exe --best --compress-resources=0 "%out%"
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ; Author           : Thibaut Lauzière (Slÿm)
 ; Author's Website : www.slym.fr
 ; e-Mail           : contact@linuxliveusb.com
 ; License          : GPL v3.0
-; Version          : 2.1
+; Version          : 2.2
 ; Download         : http://www.linuxliveusb.com
 ; Support          : http://www.linuxliveusb.com/bugs/
 ; Compiled with    : AutoIT v3.2.12.1
 
-#RequireAdmin
 
 ; Global constants
-Global Const $software_version = "2.1"
+Global Const $software_version = "2.2"
 Global $lang_ini = @ScriptDir & "\tools\languages\"
 Global Const $settings_ini = @ScriptDir & "\tools\settings\settings.ini"
 Global Const $compatibility_ini = @ScriptDir & "\tools\settings\compatibility_list.ini"
 Global Const $blacklist_ini = @ScriptDir & "\tools\settings\black_list.ini"
-Global Const $variants_using_default_mode = "default,gparted,debian,clonezilla,damnsmall,puppy431,toutou412,pclinuxos20092KDE,pmagic45,pmagic46,slax612,slitaz20,tinycore25"
+Global Const $variants_using_default_mode = "default,gparted,debian,clonezilla,damnsmall,puppy431,toutou412,pclinuxos20092KDE,pmagic45,pmagic46,slax612,slitaz20,tinycore25,grml200910,knoppix62,gnewsense23"
 Global Const $log_dir = @ScriptDir & "\logs\"
+
+Global Const $check_updates_url = "http://www.linuxliveusb.com/updates/"
 
 Global $lang, $anonymous_id
 Global $downloaded_virtualbox_filename
@@ -47,13 +49,6 @@ Global $best_mirror, $iso_size, $filename, $progress_bar, $label_step2_status
 Global $MD5_ISO ="" , $compatible_md5, $compatible_filename, $release_number = -1,$files_in_source,$prefetched_linux_list
 Global $foo
 Global $for_winactivate
-
-; Global variables for Graphical Part
-Global Const $LWA_ALPHA = 0x2
-Global Const $LWA_COLORKEY = 0x1
-
-; Global variables for debug
-Global $mem = StringSplit("-1,-1,-1,-1,-1,-1,-1", ",")
 
 Opt("GUIOnEventMode", 1)
 
@@ -104,7 +99,6 @@ EndIf
 #include <EditConstants.au3>
 #include <Array.au3>
 #include <File.au3>
-#include <md5.au3>
 #include <INet.au3>
 #include <IE.au3>
 #include <WinHTTP.au3>
@@ -114,6 +108,7 @@ EndIf
 #include <Automatic_Bug_Report.au3>
 #include <Ressources.au3>
 #include <Graphics.au3>
+#include <md5.au3>
 #include <Releases.au3>
 #include <LiLis_heart.au3>
 
@@ -160,14 +155,6 @@ $REFRESH_PNG = _GDIPlus_ImageLoadFromFile(@ScriptDir & "\tools\img\refresh.png")
 $BACK_PNG = _GDIPlus_ImageLoadFromFile(@ScriptDir & "\tools\img\back.png")
 $BACK_HOVER_PNG = _GDIPlus_ImageLoadFromFile(@ScriptDir & "\tools\img\back_hover.png")
 $PNG_GUI = _GDIPlus_ImageLoadFromFile(@ScriptDir & "\tools\img\GUI.png")
-#cs
-If FileExists(@ScriptDir & "\tools\img\GUI_" & $lang & ".png") Then
-	$PNG_GUI = _GDIPlus_ImageLoadFromFile(@ScriptDir & "\tools\img\GUI_" & $lang & ".png")
-Else
-	$PNG_GUI = _GDIPlus_ImageLoadFromFile(@ScriptDir & "\tools\img\GUI_English.png")
-EndIf
-#ce
-
 
 SendReport("Creating GUI")
 
@@ -176,6 +163,12 @@ GUISetOnEvent($GUI_EVENT_CLOSE, "GUI_Events")
 GUISetOnEvent($GUI_EVENT_MINIMIZE, "GUI_Minimize")
 GUISetOnEvent($GUI_EVENT_RESTORE, "GUI_Restore")
 GUISetOnEvent($GUI_EVENT_MAXIMIZE, "GUI_Restore")
+HotKeySet("{UP}","GUI_MoveUp")
+HotKeySet("{DOWN}","GUI_MoveDown")
+HotKeySet("{LEFT}","GUI_MoveLeft")
+HotKeySet("{RIGHT}","GUI_MoveRight")
+
+GUIRegisterMsg($WM_LBUTTONDOWN,"moveGUI")
 
 SetBitmap($GUI, $PNG_GUI, 255)
 GUIRegisterMsg($WM_NCHITTEST, "WM_NCHITTEST")
@@ -183,8 +176,7 @@ GUISetState(@SW_SHOW, $GUI)
 
 ; Old offset was 18
 $LAYERED_GUI_CORRECTION = GetVertOffset($GUI)
-$CONTROL_GUI = GUICreate("LiLi USB Creator", 450, 750, 0, $LAYERED_GUI_CORRECTION, $WS_POPUP, BitOR($WS_EX_LAYERED, $WS_EX_MDICHILD), $GUI)
-
+$CONTROL_GUI = GUICreate("LinuxLive USB Creator", 450, 750, 0, $LAYERED_GUI_CORRECTION, $WS_POPUP, BitOR($WS_EX_LAYERED, $WS_EX_MDICHILD), $GUI)
 ; Offset for applied on every items
 $offsetx0 = 27
 $offsety0 = 23
@@ -401,6 +393,7 @@ $version_in_file = "none"
 ; Sending anonymous statistics
 SendStats()
 SendReport(LogSystemConfig())
+Check_for_updates()
 
 ; initialize list of compatible releases (load the compatibility_list.ini)
 Get_Compatibility_List()
@@ -413,6 +406,11 @@ AdlibEnable("Control_Hover", 150)
 GUIRegisterMsg($WM_PAINT, "DrawAll")
 WinActivate($for_winactivate)
 GUISetState($GUI_SHOW, $CONTROL_GUI)
+
+Func MoveGUI($hW)
+    _SendMessage($GUI, $WM_SYSCOMMAND, 0xF012, 0)
+	ControlFocus("LinuxLive USB Creator", "",  $REFRESH_AREA)
+EndFunc
 
 ; Main part
 While 1
@@ -481,7 +479,7 @@ EndFunc   ;==>Redraw_Traffic_Lights
 Func Control_Hover()
 	Global $previous_hovered_control
 	Local $CursorCtrl
-	If WinActive("CONTROL_GUI") Or WinActive("LiLi USB Creator") Then
+	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
 
 		$CursorCtrl = GUIGetCursorInfo()
 		If Not @error Then
@@ -591,6 +589,21 @@ Func HideFile($file_or_folder)
 			UpdateLog("                   " & "File not found")
 		Else
 			UpdateLog("                   " & "Error while hiding")
+		EndIf
+	EndIf
+	SendReport("End-HideFile")
+EndFunc   ;==>HideFile
+
+Func ShowFile($file_or_folder)
+	SendReport("Start-HideFile ( " & $file_or_folder & " )")
+	UpdateLog("Showing file : " & $file_or_folder)
+	If FileSetAttrib($file_or_folder, "-SH") == 1 Then
+		UpdateLog("                   " & "File showed")
+	Else
+		If FileExists($file_or_folder) Then
+			UpdateLog("                   " & "File not showed")
+		Else
+			UpdateLog("                   " & "Error while showing")
 		EndIf
 	EndIf
 	SendReport("End-HideFile")
@@ -1072,7 +1085,7 @@ Func GetKbdCode()
 			SendReport("End-GetKbdCode")
 			Return "locale=fr_CH bootkbd=fr-latin1 console-setup/layoutcode=ch console-setup/variantcode=fr "
 
-		Case StringInStr("0407,0807,0c07,1007,1407,0413,0813", @OSLang)
+		Case StringInStr("0407,0807,0c07,1007,1407", @OSLang)
 			; German & dutch
 			UpdateLog(Translate("Détection du clavier") & " : " & Translate("Allemand"))
 			SendReport("End-GetKbdCode")
@@ -1372,7 +1385,9 @@ Func Check_source_integrity($linux_live_file)
 		Step2_Check("good")
 		$temp_index = _ArraySearch($compatible_filename, "regular_linux.iso")
 		$release_number = $temp_index
-		Return ""
+		Disable_Persistent_Mode()
+		SendReport("IN-Check_source_integrity (skipping recognition, using default mode)")
+		return ""
 	EndIf
 
 
@@ -1428,41 +1443,62 @@ Func Check_source_integrity($linux_live_file)
 				Step2_Check("warning")
 				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
 				;MsgBox(48, Translate("Attention"), Translate("Cette version de Linux n'est pas compatible avec ce logiciel.") & @CRLF & Translate("LinuxLive USB Creator essaiera quand même de l'installer en utilisant les même paramètres que pour") & @CRLF & @CRLF & @TAB & ReleaseGetDescription($release_number))
-			ElseIf StringInStr($shortname, "9.10") Or StringInStr($shortname, "karmic") Or StringInStr($shortname, "ubuntu") Then
+			ElseIf StringInStr($shortname, "grml") Then
+				; Grml
+				$temp_index = _ArraySearch($compatible_filename, "grml_2009.10.iso")
+				$release_number = $temp_index
+				Step2_Check("good")
+				Disable_Persistent_Mode()
+				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
+			ElseIf StringInStr($shortname, "knoppix") Then
+				; Knoppix
+				$temp_index = _ArraySearch($compatible_filename, "KNOPPIX_V6.2CD-2009-11-18-EN.iso")
+				$release_number = $temp_index
+				Step2_Check("good")
+				Disable_Persistent_Mode()
+				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
+			ElseIf ( StringInStr($shortname, "9.10") Or StringInStr($shortname, "karmic") Or StringInStr($shortname, "ubuntu") ) Then
 				; Ubuntu Karmic (>=9.10) based
 				$temp_index = _ArraySearch($compatible_filename, "ubuntu-9.10-desktop-i386.iso")
 				$release_number = $temp_index
-				Step2_Check("warning")
+				Step2_Check("good")
 				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
 				;MsgBox(48, Translate("Attention"), Translate("Cette version de Linux n'est pas compatible avec ce logiciel.") & @CRLF & Translate("LinuxLive USB Creator essaiera quand même de l'installer en utilisant les même paramètres que pour") & @CRLF & @CRLF & @TAB & ReleaseGetDescription($release_number))
-			ElseIf StringInStr($shortname, "9.04") Or StringInStr($shortname, "Fluxbuntu") Or StringInStr($shortname, "gnewsense") Then
+			ElseIf StringInStr($shortname, "9.04") Or StringInStr($shortname, "Fluxbuntu") Then
 				; Ubuntu 9.04 based
 				$temp_index = _ArraySearch($compatible_filename, "ubuntu-9.04-desktop-i386.iso")
 				$release_number = $temp_index
-				Step2_Check("warning")
+				Step2_Check("good")
 				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
 				;MsgBox(48, Translate("Attention"), Translate("Cette version de Linux n'est pas compatible avec ce logiciel.") & @CRLF & Translate("LinuxLive USB Creator essaiera quand même de l'installer en utilisant les même paramètres que pour") & @CRLF & @CRLF & @TAB & ReleaseGetDescription($release_number))
 			ElseIf StringInStr($shortname, "kuki") Then
 				; Kuki based (Ubuntu)
 				$temp_index = _ArraySearch($compatible_filename, "kuki-2.8-20090829Final.iso")
 				$release_number = $temp_index
-				Step2_Check("warning")
+				Step2_Check("good")
 				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
 				;MsgBox(48, Translate("Attention"), Translate("Cette version de Linux n'est pas compatible avec ce logiciel.") & @CRLF & Translate("LinuxLive USB Creator essaiera quand même de l'installer en utilisant les même paramètres que pour") & @CRLF & @CRLF & @TAB & ReleaseGetDescription($release_number))
 			ElseIf StringInStr($shortname, "fedora") Or StringInStr($shortname, "F10") Or StringInStr($shortname, "F11") Then
 				; Fedora Based
 				$temp_index = _ArraySearch($compatible_filename, "Fedora-11-i686-Live.iso")
 				$release_number = $temp_index
-				Step2_Check("warning")
+				Step2_Check("good")
 				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
 				;MsgBox(48, Translate("Attention"), Translate("Cette version de Linux n'est pas compatible avec ce logiciel.") & @CRLF & Translate("LinuxLive USB Creator essaiera quand même de l'installer en utilisant les même paramètres que pour") & @CRLF & @CRLF & @TAB & ReleaseGetDescription($release_number))
 			ElseIf StringInStr($shortname, "mint") Then
 				; Mint Based
 				$temp_index = _ArraySearch($compatible_filename, "LinuxMint-7.iso")
 				$release_number = $temp_index
-				Step2_Check("warning")
+				Step2_Check("good")
 				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
 				;MsgBox(48, Translate("Attention"), Translate("Cette version de Linux n'est pas compatible avec ce logiciel.") & @CRLF & Translate("LinuxLive USB Creator essaiera quand même de l'installer en utilisant les même paramètres que pour") & @CRLF & @CRLF & @TAB & ReleaseGetDescription($release_number))
+			ElseIf StringInStr($shortname, "gnewsense") Then
+				; gNewSense Based
+				$temp_index = _ArraySearch($compatible_filename, "gnewsense-livecd-deltah-i386-2.3.iso")
+				$release_number = $temp_index
+				Step2_Check("good")
+				Disable_Persistent_Mode()
+				SendReport("IN-Check_source_integrity (MD5 not found but keyword found , will use : "&ReleaseGetCodename($release_number) & " )")
 			ElseIf StringInStr($shortname, "clonezilla") Then
 				; Clonezilla
 				$temp_index = _ArraySearch($compatible_filename, "clonezilla-live-1.2.2-31.iso")
@@ -1803,36 +1839,72 @@ EndFunc
 
 ; Clickable parts of images
 Func GUI_Exit()
-	SendReport("Start-GUI_Exit")
-	if @InetGetActive Then InetGet("abort")
-	if $foo Then ProcessClose($foo)
-	GUIDelete($CONTROL_GUI)
-	GUIDelete($GUI)
-	_ProgressDelete($progress_bar)
-	_GDIPlus_GraphicsDispose($ZEROGraphic)
-	_GDIPlus_ImageDispose($EXIT_NORM)
-	_GDIPlus_ImageDispose($EXIT_OVER)
-	_GDIPlus_ImageDispose($MIN_NORM)
-	_GDIPlus_ImageDispose($MIN_OVER)
-	_GDIPlus_ImageDispose($PNG_GUI)
-	_GDIPlus_ImageDispose($CD_PNG)
-	_GDIPlus_ImageDispose($CD_HOVER_PNG)
-	_GDIPlus_ImageDispose($ISO_PNG)
-	_GDIPlus_ImageDispose($ISO_HOVER_PNG)
-	_GDIPlus_ImageDispose($DOWNLOAD_PNG)
-	_GDIPlus_ImageDispose($DOWNLOAD_HOVER_PNG)
-	_GDIPlus_ImageDispose($LAUNCH_PNG)
-	_GDIPlus_ImageDispose($LAUNCH_HOVER_PNG)
-	_GDIPlus_ImageDispose($HELP)
-	_GDIPlus_ImageDispose($BAD)
-	_GDIPlus_ImageDispose($GOOD)
-	_GDIPlus_ImageDispose($WARNING)
-	_GDIPlus_ImageDispose($BACK_PNG)
-	_GDIPlus_ImageDispose($BACK_HOVER_PNG)
-	_GDIPlus_Shutdown()
-	SendReport("End-GUI_Exit")
-	Exit
-EndFunc   ;==>GUI_Exit
+	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
+		SendReport("Start-GUI_Exit")
+		if @InetGetActive Then InetGet("abort")
+		if $foo Then ProcessClose($foo)
+		GUIDelete($CONTROL_GUI)
+		GUIDelete($GUI)
+		_ProgressDelete($progress_bar)
+		_GDIPlus_GraphicsDispose($ZEROGraphic)
+		_GDIPlus_ImageDispose($EXIT_NORM)
+		_GDIPlus_ImageDispose($EXIT_OVER)
+		_GDIPlus_ImageDispose($MIN_NORM)
+		_GDIPlus_ImageDispose($MIN_OVER)
+		_GDIPlus_ImageDispose($PNG_GUI)
+		_GDIPlus_ImageDispose($CD_PNG)
+		_GDIPlus_ImageDispose($CD_HOVER_PNG)
+		_GDIPlus_ImageDispose($ISO_PNG)
+		_GDIPlus_ImageDispose($ISO_HOVER_PNG)
+		_GDIPlus_ImageDispose($DOWNLOAD_PNG)
+		_GDIPlus_ImageDispose($DOWNLOAD_HOVER_PNG)
+		_GDIPlus_ImageDispose($LAUNCH_PNG)
+		_GDIPlus_ImageDispose($LAUNCH_HOVER_PNG)
+		_GDIPlus_ImageDispose($HELP)
+		_GDIPlus_ImageDispose($BAD)
+		_GDIPlus_ImageDispose($GOOD)
+		_GDIPlus_ImageDispose($WARNING)
+		_GDIPlus_ImageDispose($BACK_PNG)
+		_GDIPlus_ImageDispose($BACK_HOVER_PNG)
+		_GDIPlus_Shutdown()
+		SendReport("End-GUI_Exit")
+		Exit
+	EndIf
+EndFunc  ;==>GUI_Exit
+
+
+Func GUI_MoveUp()
+	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
+		$position = WinGetPos("LiLi USB Creator")
+		WinMove("LiLi USB Creator","",$position[0],$position[1]-10)
+		;Fix the focus issue
+		ControlFocus("LinuxLive USB Creator", "",  $REFRESH_AREA)
+	EndIf
+EndFunc
+
+Func GUI_MoveDown()
+	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
+		$position = WinGetPos("LiLi USB Creator")
+		WinMove("LiLi USB Creator","",$position[0],$position[1]+10)
+		ControlFocus("LinuxLive USB Creator", "",  $REFRESH_AREA)
+	EndIf
+EndFunc
+
+Func GUI_MoveLeft()
+	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
+		$position = WinGetPos("LiLi USB Creator")
+		WinMove("LiLi USB Creator","",$position[0]-10,$position[1])
+		ControlFocus("LinuxLive USB Creator", "",  $REFRESH_AREA)
+	EndIf
+EndFunc
+
+Func GUI_MoveRight()
+	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
+		$position = WinGetPos("LiLi USB Creator")
+		WinMove("LiLi USB Creator","",$position[0]+10,$position[1])
+		ControlFocus("LinuxLive USB Creator", "",  $REFRESH_AREA )
+	EndIf
+EndFunc
 
 Func GUI_Minimize()
 	GUISetState(@SW_MINIMIZE, $GUI)
@@ -1843,7 +1915,7 @@ Func GUI_Restore()
 			GUISetState($GUI_SHOW, $CONTROL_GUI)
 			GUIRegisterMsg($WM_PAINT, "DrawAll")
 			WinActivate($for_winactivate)
-			ControlFocus("LiLi USB Creator", "",  $combo )
+			ControlFocus("LiLi USB Creator", "",  $REFRESH_AREA )
 EndFunc   ;==>GUI_Minimize
 
 Func GUI_Choose_Drive()
@@ -2242,6 +2314,7 @@ Func Download_State()
 	$begin = TimerInit()
 	$oldgetbytesread = @InetGetBytesRead
 
+	$iso_size_mb = RoundForceDecimal($iso_size / (1024 * 1024))
 	While @InetGetActive
 		$percent_downloaded = Int((100 * @InetGetBytesRead / $iso_size))
 		_ProgressSet($progress_bar, $percent_downloaded)
@@ -2252,7 +2325,7 @@ Func Download_State()
 			$begin = TimerInit()
 			$oldgetbytesread = @InetGetBytesRead
 		EndIf
-		_ProgressSetText($progress_bar, $percent_downloaded & "% ( " & RoundForceDecimal(@InetGetBytesRead / (1024 * 1024)) & " / " & RoundForceDecimal($iso_size / (1024 * 1024)) & " " & "MB" & " ) " & $estimated_time)
+		_ProgressSetText($progress_bar, $percent_downloaded & "% ( " & RoundForceDecimal(@InetGetBytesRead / (1024 * 1024)) & " / " & $iso_size_mb & " " & "MB" & " ) " & $estimated_time)
 		Sleep(300)
 	WEnd
 
@@ -2274,6 +2347,9 @@ Func HumanTime($sec)
 
 	$minutes = Floor($sec / 60) - $hours * 60
 	$seconds = Floor($sec) - $minutes * 60
+
+	; to avoid displaying bullshit
+	if $minutes < 0 OR $hours < 0  OR $seconds < 0 Then Return ""
 
 	If $sec > 3600 Then
 		$human_time = $hours & "h " & $minutes & "m "
@@ -2422,8 +2498,11 @@ Func GUI_Launch_Creation()
 
 			Create_persistence_file($selected_drive, $release_number, GUICtrlRead($slider_visual), GUICtrlRead($hide_files))
 
-			Install_boot_sectors($selected_drive)
+			Install_boot_sectors($selected_drive,GUICtrlRead($hide_files))
 		EndIf
+
+		; Create Autorun menu
+		Create_autorun($selected_drive, $release_number)
 
 		If (GUICtrlRead($hide_files) == $GUI_CHECKED) Then Hide_live_files($selected_drive)
 
@@ -2443,8 +2522,7 @@ Func GUI_Launch_Creation()
 
 		EndIf
 
-		; Create Autorun menu
-		Create_autorun($selected_drive, $release_number)
+
 
 		; Creation is now done
 		UpdateStatus("Votre clé LinuxLive est maintenant prête !")
@@ -2456,7 +2534,7 @@ Func GUI_Launch_Creation()
 
 		;Final_Help($selected_drive)
 		ShellExecute("http://www.linuxliveusb.com/using-lili.html", "", "", "", 7)
-
+		if isBeta() Then Ask_For_Feedback()
 	Else
 		UpdateStatus("Veuillez valider les étapes 1 à 3")
 	EndIf
@@ -2488,6 +2566,11 @@ Func Final_Help($selected_drive)
 	SendReport("End-Final_Help")
 EndFunc   ;==>Final_Help
 
+Func Ask_For_Feedback()
+		$return = MsgBox(65, "Help me to improve LiLi", "This is a Beta or RC version, click OK to leave a feedback or click Cancel to close this window")
+		If $return = 1 Then ShellExecute("http://www.linuxliveusb.com/feedback/index.php", "", "", "", 7)
+EndFunc
+
 Func GUI_Events()
 
 	SendReport("Start-GUI_Events (GUI_CtrlID=" & @GUI_CtrlId & " )")
@@ -2504,7 +2587,7 @@ Func GUI_Events()
 			GUISetState($GUI_SHOW, $CONTROL_GUI)
 			GUIRegisterMsg($WM_PAINT, "DrawAll")
 			WinActivate($for_winactivate)
-			ControlFocus("LiLi USB Creator", "",  $combo )
+			ControlFocus("LiLi USB Creator", "",  $REFRESH_AREA )
 	EndSelect
 	SendReport("End-GUI_Events")
 EndFunc   ;==>GUI_Events
@@ -2651,3 +2734,77 @@ EndFunc   ;==>_Language
 Func Translate($txt)
 	Return IniRead($lang_ini, $lang, $txt, $txt)
 EndFunc   ;==>Translate
+
+; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+; ///////////////////////////////// Updates management                            ///////////////////////////////////////////////////////////////////////////////
+; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Func Check_for_updates()
+	SendReport("Start-Check_for_updates")
+	$check_result = _INetGetSource($check_updates_url&"?version")
+	if NOT @error AND NOT $check_result = 0 AND VersionCompare($check_result,$software_version)=1 Then
+		SendReport("IN-Check_for_updates ( Found a new version : "&$check_result&" )")
+		$return = MsgBox(68,Translate("There is a new version available"),Translate("Your LiLi's version is not up to date.")&@CRLF&@CRLF& Translate("Last version is") & " : " & $check_result & @CRLF& Translate("Your version is") & " : " &$software_version &@CRLF &@CRLF& Translate("Do want to download it ?"))
+		if $return =6 Then ShellExecute("http://www.linuxliveusb.com/")
+	EndIf
+	SendReport("End-Check_for_updates")
+EndFunc
+
+; Compare 2 versions
+;	0 =  Versions are equals
+;	1 =  Version 1 is higher
+;   2 =  Version 2 is higher
+Func VersionCompare($version1, $version2)
+	If VersionCode($version1) = VersionCode($version2) Then
+		Return 0
+	ElseIf VersionCode($version1) > VersionCode($version2) Then
+		Return 1
+	Else
+		Return 2
+	EndIf
+EndFunc   ;==>VersionCompare
+
+; Transform a label to a number
+Func SortVersionLabel($version_label)
+	Switch StringLower($version_label)
+		Case "alpha"
+			Return 0
+		Case "beta"
+			Return 1
+		Case "beta1"
+			Return 2
+		Case "beta2"
+			Return 3
+		Case "beta3"
+			Return 4
+		Case "rc1"
+			Return 5
+		Case "rc2"
+			Return 6
+		Case "rc3"
+			Return 7
+		Case Else
+			Return 8
+	EndSwitch
+EndFunc   ;==>SortVersionLabel
+
+; Transform a version name to a version code to be compared up to 3 digits like "2.3.1 Beta"
+Func VersionCode($version)
+	$parse_version=StringSplit($version," ")
+	$version_number=StringReplace($parse_version[1],".","")
+	if StringLen($version_number)=2 Then $version_number &="0"
+	if $parse_version[0] >= 2 Then
+		$version_number &= SortVersionLabel($parse_version[2])
+	Else
+		$version_number &= "8"
+	EndIf
+	Return $version_number
+EndFunc
+
+Func isBeta()
+	if StringInStr($software_version,"RC") OR StringInStr($software_version,"Beta") OR StringInStr($software_version,"Alpha") Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc

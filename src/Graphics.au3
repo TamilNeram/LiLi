@@ -2,6 +2,10 @@
 ; ///////////////////////////////// Graphical Part                                ///////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+; Global variables for Graphical Part
+Global Const $LWA_ALPHA = 0x2
+Global Const $LWA_COLORKEY = 0x1
+Const $WM_LBUTTONDOWN = 0x0201
 
 
 Func GetVertOffset($hgui)
@@ -17,7 +21,9 @@ Func GetVertOffset($hgui)
 EndFunc  ;==>GetVertOffset
 
 Func WM_NCHITTEST($hWnd, $iMsg, $iwParam, $ilParam)
-	If ($hWnd = $GUI) And ($iMsg = $WM_NCHITTEST) Then Return $HTCAPTION
+	If ($hWnd = $GUI) And ($iMsg = $WM_NCHITTEST) Then
+		Return $HTCAPTION
+	EndIf
 EndFunc   ;==>WM_NCHITTEST
 
 Func SetBitmap($hGUI, $hImage, $iOpacity)
