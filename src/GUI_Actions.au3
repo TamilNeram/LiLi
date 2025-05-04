@@ -58,13 +58,14 @@ EndFunc   ;==>Enable_Hide_Option
 
 ; Clickable parts of images
 Func GUI_Exit()
+	Global $current_download
 	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
 		SendReport("Start-GUI_Exit")
-		If @InetGetActive Then InetGet("abort")
+		InetClose($current_download)
 		If $foo Then ProcessClose($foo)
 		GUIDelete($CONTROL_GUI)
 		GUIDelete($GUI)
-		_ProgressDelete($progress_bar)
+		if $progress_bar Then _ProgressDelete($progress_bar)
 		_GDIPlus_GraphicsDispose($ZEROGraphic)
 		_GDIPlus_ImageDispose($EXIT_NORM)
 		_GDIPlus_ImageDispose($EXIT_OVER)
@@ -214,12 +215,17 @@ EndFunc   ;==>GUI_Refresh_Drives
 
 Func GUI_Choose_ISO()
 	SendReport("Start-GUI_Choose_ISO")
-	$source_file = FileOpenDialog(Translate("Choisir l'image ISO d'un CD live de Linux"), "", "ISO / IMG / ZIP (*.iso;*.img;*.zip)", 1)
+	$source_file = FileOpenDialog(Translate("Please choose an ISO image of LinuxLive CD"), "", "ISO / IMG / ZIP (*.iso;*.img;*.zip)", 1)
 	If @error Then
-		SendReport("IN-ISO_AREA (no iso)")
-		MsgBox(4096, "", Translate("No file selected"))
-		$file_set = 0;
-		Step2_Check("bad")
+		if IsString($file_set) Then
+			Return ""
+		Else
+			SendReport("IN-ISO_AREA (no iso)")
+			MsgBox(4096, "", Translate("No file selected"))
+			$file_set = 0;
+			Step2_Check("bad")
+			GUI_Show_Step2_Default_Menu()
+		EndIf
 	Else
 		$file_set = $source_file
 		Check_source_integrity($file_set)
@@ -245,18 +251,35 @@ Func GUI_Choose_CD()
 		Step2_Check("bad")
 		$file_set = 0;
 	Else
-		Disable_Persistent_Mode()
 		SendReport("IN-CD_AREA (CD selected :" & $folder_file & ")")
 		$file_set = $folder_file;
 		$file_set_mode = "folder"
+
+		; If user already select to force some install parameters
+		If ReadSetting("Install_Parameters","automatic_recognition")<>"yes" Then
+			$forced_description=ReadSetting("Install_Parameters","use_same_parameter_as")
+			$release_number = FindReleaseFromDescription($forced_description)
+			if $release_number <> -1 Then
+				Step2_Check("good")
+				$step2_display_menu = 1
+				GUI_Hide_Step2_Default_Menu()
+				GUI_Show_Back_Button()
+				Sleep(100)
+				GUI_Show_Check_status(Translate("Verifying") & " OK"&@CRLF& Translate("This version is compatible and its integrity was checked")&@CRLF&Translate("Recognized Linux")&" : "&@CRLF& @CRLF & @TAB &ReleaseGetDescription($release_number))
+				Check_If_Default_Should_Be_Used($release_number)
+			EndIf
+			SendReport("IN-GUI_Choose_CD (forced install parameters to : "&$forced_description&" - Release # :"&$release_number&")")
+			Return ""
+		EndIf
+
+		Disable_Persistent_Mode()
+
 		;Check_folder_integrity($folder_file)
 
 		; Used to avoid redrawing the old elements of Step 2 (ISO, CD and download)
 		$step2_display_menu = 1
 		GUI_Hide_Step2_Default_Menu()
-
 		GUI_Show_Back_Button()
-
 		$temp_index = _ArraySearch($compatible_filename, "regular_linux.iso")
 		$release_number = $temp_index
 		GUI_Show_Check_status(Translate("This Linux is not in the compatibility list")& "." & @CRLF &Translate("However, LinuxLive USB Creator will try to use same install parameters as for") & @CRLF & @CRLF & @TAB & ReleaseGetDescription($release_number))
@@ -277,9 +300,6 @@ Func GUI_Download()
 
 	if NOT $combo_linux Then
 		$combo_linux = GUICtrlCreateCombo(">> " & Translate("Select your favourite Linux"), 38 + $offsetx0, 240 + $offsety0, 300, -1, BitOR($CBS_DROPDOWNLIST, $WS_VSCROLL))
-
-		GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
-		GUICtrlSetColor(-1, 0xFFFFFF)
 		GUICtrlSetOnEvent(-1, "GUI_Select_Linux")
 		GUICtrlSetState($combo_linux, $GUI_SHOW)
 
@@ -343,8 +363,8 @@ Func GUI_Hide_Step2_Download_Menu()
 	GUICtrlSetState($download_label2, $GUI_HIDE)
 	GUICtrlSetState($OR_label, $GUI_HIDE)
 	$cleaner = GUICtrlCreateLabel("", 38 + $offsetx0, 238 + $offsety0, 300, 30)
-
 	GUICtrlSetState($cleaner, $GUI_SHOW)
+	GUICtrlDelete($cleaner)
 EndFunc
 
 Func GUI_Show_Step2_Default_Menu()
@@ -377,8 +397,9 @@ EndFunc
 Func GUI_Back_Download()
 	SendReport("Start-GUI_Back_Download")
 	Global $label_step2_status,$label_step2_status2
-	_ProgressDelete($progress_bar)
-	If @InetGetActive = 1 Then InetGet("abort")
+	Global $current_download,$progress_bar
+	if $progress_bar Then _ProgressDelete($progress_bar)
+	InetClose($current_download)
 	GUI_Hide_Step2_Download_Menu()
 	GUI_Hide_Back_Button()
 	GUICtrlSetState($label_step2_status,$GUI_HIDE)
@@ -403,23 +424,23 @@ Func GUI_Select_Linux()
 EndFunc   ;==>GUI_Select_Linux
 
 Func GUI_Download_Automatically()
-	SendReport("Start-GUI_Download_Automatically")
 	$selected_linux = GUICtrlRead($combo_linux)
+	SendReport("Start-GUI_Download_Automatically (Downloading : "&$selected_linux&" )")
 	$release_in_list = FindReleaseFromDescription($selected_linux)
 	DownloadRelease($release_in_list, 1)
 	SendReport("End-GUI_Download_Automatically")
 EndFunc   ;==>GUI_Download_Automatically
 
 Func GUI_Download_Manually()
-	SendReport("Start-GUI_Download_Manually")
 	$selected_linux = GUICtrlRead($combo_linux)
+	SendReport("Start-GUI_Download_Manually (Downloading "&$selected_linux&" )")
 	$release_in_list = FindReleaseFromDescription($selected_linux)
 	DownloadRelease($release_in_list, 0)
 	SendReport("End-GUI_Download_Manually")
 EndFunc   ;==>GUI_Download_Manually
 
 Func DownloadRelease($release_in_list, $automatic_download)
-	SendReport("Start-DownloadRelease (Release=" & $release_in_list & " - Auto_DL=" & $automatic_download & " )")
+	SendReport("Start-DownloadRelease")
 	Local $latency[50], $i, $mirror, $available_mirrors = 0, $tested_mirrors = 0
 
 	GUI_Hide_Step2_Download_Menu()
@@ -430,15 +451,11 @@ Func DownloadRelease($release_in_list, $automatic_download)
 	;GUICtrlSetCursor($BACK_AREA, 0)
 	;GUICtrlSetOnEvent($BACK_AREA, "GUI_Back_Download")
 
+	_ProgressDelete($progress_bar)
+	Global $_Progress_Bars[1][15] = [[-1]]
 	$progress_bar = _ProgressCreate(38 + $offsetx0, 238 + $offsety0, 300, 30)
 	_ProgressSetImages($progress_bar, @ScriptDir & "\tools\img\progress_green.jpg", @ScriptDir & "\tools\img\progress_background.jpg")
 	_ProgressSetFont($progress_bar, "", -1, -1, 0x000000, 0)
-
-	if NOT $progress_bar Then
-		$progress_bar = _ProgressCreate(38 + $offsetx0, 238 + $offsety0, 300, 30)
-		_ProgressSetImages($progress_bar, @ScriptDir & "\tools\img\progress_green.jpg", @ScriptDir & "\tools\img\progress_background.jpg")
-		_ProgressSetFont($progress_bar, "", -1, -1, 0x000000, 0)
-	EndIf
 
 	$label_step2_status = GUICtrlCreateLabel(Translate("Looking for the fastest mirror"), 38 + $offsetx0, 231 + $offsety0 + 50, 300, 80)
 	GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
@@ -447,18 +464,18 @@ Func DownloadRelease($release_in_list, $automatic_download)
 
 	For $i = $R_MIRROR1 To $R_MIRROR10
 		$mirror = $releases[$release_in_list][$i]
-		If StringStripWS($mirror, 1) <> "" Then $available_mirrors = $available_mirrors + 1
+		If StringStripWS($mirror, 8) <> "" Then $available_mirrors = $available_mirrors + 1
 	Next
 
 	For $i = $R_MIRROR1 To $R_MIRROR10
 		$mirror = $releases[$release_in_list][$i]
-		If StringStripWS($mirror, 1) <> "" Then
+		If StringStripWS($mirror, 8) <> "" Then
 			_ProgressSet($progress_bar, $tested_mirrors * 100 / $available_mirrors)
 			_ProgressSetText($progress_bar, Translate("Testing mirror") & " : " & URLToHostname($mirror))
 			$temp_latency = Ping(URLToHostname($mirror))
 			$tested_mirrors = $tested_mirrors + 1
 			If @error = 0 Then
-				$temp_size = Round(InetGetSize($mirror) / 1048576)
+				$temp_size = Round(InetGetSize($mirror,3) / 1048576)
 				If $temp_size < 5 Or $temp_size > 5000 Then
 					$temp_latency = 10000
 				EndIf
@@ -473,7 +490,6 @@ Func DownloadRelease($release_in_list, $automatic_download)
 
 	Next
 	If _ArrayMin($latency, 1, $R_MIRROR1, $R_MIRROR10) = 10000 Then
-		SendReport("ck2")
 		UpdateStatusStep2(Translate("No online mirror found") & " !" & @CRLF & Translate("Please check your internet connection or try with another linux"))
 		_ProgressSet($progress_bar, 100)
 		Sleep(3000)
@@ -488,8 +504,9 @@ Func DownloadRelease($release_in_list, $automatic_download)
 			; Download automatically
 			$iso_size = InetGetSize($best_mirror)
 			$filename = unix_path_to_name($best_mirror)
-			$inet_success = InetGet($best_mirror, @ScriptDir & "\" & $filename, 1, 1)
-			If $inet_success Then
+			$temp_filename = StringReplace($filename,get_extension($filename),"temp")
+			$current_download = InetGet($best_mirror, @DesktopDir & "\" & $temp_filename, 1, 1)
+			If InetGetInfo($current_download, 4)=0 Then
 				UpdateStatusStep2(Translate("Downloading") & " " & $filename & @CRLF & Translate("from") & " " & URLToHostname($best_mirror))
 				Download_State()
 			Else
@@ -600,26 +617,28 @@ EndFunc   ;==>DisplayMirrorList
 
 Func Download_State()
 	SendReport("Start-Download_State")
+	Global $current_download
 	Local $begin, $oldgetbytesread, $estimated_time = ""
 
 	$begin = TimerInit()
-	$oldgetbytesread = @InetGetBytesRead
+	$oldgetbytesread = InetGetInfo($current_download, 0)
 
 	$iso_size_mb = RoundForceDecimal($iso_size / (1024 * 1024))
-	While @InetGetActive
-		$percent_downloaded = Int((100 * @InetGetBytesRead / $iso_size))
+	Do
+		$percent_downloaded = Int((100 * InetGetInfo($current_download, 0) / $iso_size))
 		_ProgressSet($progress_bar, $percent_downloaded)
 		$dif = TimerDiff($begin)
+		$newgetbytesread = InetGetInfo($current_download, 0)
 		If $dif > 1000 Then
-			$bytes_per_ms = (@InetGetBytesRead - $oldgetbytesread) / $dif
-			$estimated_time = HumanTime(($iso_size - @InetGetBytesRead) / (1000 * $bytes_per_ms))
+			$bytes_per_ms = ($newgetbytesread - $oldgetbytesread) / $dif
+			$estimated_time = HumanTime(($iso_size - $newgetbytesread) / (1000 * $bytes_per_ms))
 			$begin = TimerInit()
-			$oldgetbytesread = @InetGetBytesRead
+			$oldgetbytesread = $newgetbytesread
 		EndIf
-		_ProgressSetText($progress_bar, $percent_downloaded & "% ( " & RoundForceDecimal(@InetGetBytesRead / (1024 * 1024)) & " / " & $iso_size_mb & " " & "MB" & " ) " & $estimated_time)
+		_ProgressSetText($progress_bar, $percent_downloaded & "% ( " & RoundForceDecimal($newgetbytesread / (1024 * 1024)) & " / " & $iso_size_mb & " " & "MB" & " ) " & $estimated_time)
 		Sleep(300)
-	WEnd
-
+	Until InetGetInfo($current_download, 2)
+	FileMove(@DesktopDir & "\" & $temp_filename,@DesktopDir & "\" & $filename)
 	_ProgressSet($progress_bar, 100)
 	_ProgressSetText($progress_bar, "100% ( " & Round($iso_size / (1024 * 1024)) & " / " & Round($iso_size / (1024 * 1024)) & " " & "MB" & " )")
 
@@ -627,7 +646,8 @@ Func Download_State()
 	Sleep(3000)
 	_ProgressDelete($progress_bar)
 	GUI_Hide_Step2_Download_Menu()
-	$file_set = @ScriptDir & "\" & $filename
+
+	$file_set = @DesktopDir & "\" & $filename
 	Check_source_integrity($file_set)
 	SendReport("End-Download_State")
 EndFunc   ;==>Download_State
@@ -703,13 +723,9 @@ EndFunc   ;==>GUI_Persistence_Input
 
 Func GUI_Format_Key()
 	SendReport("Start-GUI_Format_Key")
-	If GUICtrlRead($formater) == $GUI_CHECKED Then
-		GUICtrlSetData($label_max, SpaceAfterLinuxLiveMB($selected_drive) & " " & Translate("MB"))
-		GUICtrlSetLimit($slider, SpaceAfterLinuxLiveMB($selected_drive) / 10, 0)
-	Else
-		GUICtrlSetData($label_max, SpaceAfterLinuxLiveMB($selected_drive) & " " & Translate("MB"))
-		GUICtrlSetLimit($slider, SpaceAfterLinuxLiveMB($selected_drive) / 10, 0)
-	EndIf
+
+	GUICtrlSetData($label_max, SpaceAfterLinuxLiveMB($selected_drive) & " " & Translate("MB"))
+	GUICtrlSetLimit($slider, SpaceAfterLinuxLiveMB($selected_drive) / 10, 0)
 
 	If ((StringInStr(DriveGetFileSystem($selected_drive), "FAT") >= 1 Or GUICtrlRead($formater) == $GUI_CHECKED) And SpaceAfterLinuxLiveMB($selected_drive) > 0) Then
 		; State is OK ( FAT32 or FAT format and 700MB+ free)
@@ -734,15 +750,20 @@ Func GUI_Format_Key()
 	SendReport("End-GUI_Format_Key")
 EndFunc   ;==>GUI_Format_Key
 
-Func GUI_Launch_Creation()
+Func GUI_Check_VirtualBox()
+	GUI_Format_Key()
+EndFunc   ;==>GUI_Format_Key
 
+Func GUI_Launch_Creation()
+	Local $return=""
 	; to avoid to create the key twice in a row
 	if $already_create_a_key >0 Then
 		$return = MsgBox(33,Translate("Please read"),Translate("You have already created a key")&"."&@CRLF&Translate("Are you sure that you want to recreate one")&" ?")
 		if $return == 2 Then Return ""
 	EndIf
-	SendReport(LogSystemConfig())
+
 	SendReport("Start-GUI_Launch_Creation")
+	SendReport(LogSystemConfig())
 	; Disable the controls and re-enable after creation
 
 	$selected_drive = StringLeft(GUICtrlRead($combo), 2)
@@ -761,7 +782,7 @@ Func GUI_Launch_Creation()
 	EndIf
 
 	; Initializing log file, already initialized when using verbose_logging
-	If IniRead($settings_ini, "General", "verbose_logging", "no") = "no" Then InitLog()
+	If ReadSetting( "General", "verbose_logging") <> "yes" Then InitLog()
 
 	; Format option has been selected
 	If (GUICtrlRead($formater) == $GUI_CHECKED) And $annuler <> 2 Then
@@ -779,7 +800,7 @@ Func GUI_Launch_Creation()
 
 		; Cleaning old installs only if needed
 		If $file_set_mode <> "img" Then
-			InitializeFilesInSource($file_set)
+			if InitializeFilesInSource($file_set)=-1 Then Return -1
 			If GUICtrlRead($formater) <> $GUI_CHECKED Then Clean_old_installs($selected_drive, $release_number)
 		EndIf
 
@@ -791,42 +812,43 @@ Func GUI_Launch_Creation()
 		ElseIf $file_set_mode = "folder" Then
 			Create_Stick_From_CD($selected_drive, $file_set)
 		ElseIf $file_set_mode = "img" Then
-			Create_Stick_From_IMG($selected_drive, $file_set)
+			if Create_Stick_From_IMG($selected_drive, $file_set)=-1 Then Return -1
 		EndIf
 
 		; If it's not an IMG file, we have to do all these things :
 		If $file_set_mode <> "img" Then
 			Rename_and_move_files($selected_drive, $release_number)
 
-			Create_boot_menu($selected_drive, $release_number)
-
 			Create_persistence_file($selected_drive, $release_number, GUICtrlRead($slider_visual), GUICtrlRead($hide_files))
+
+			Create_boot_menu($selected_drive, $release_number)
 
 			Install_boot_sectors($selected_drive,$release_number, GUICtrlRead($hide_files))
 
 			; Create Autorun menu
 			Create_autorun($selected_drive, $release_number)
+
+			CreateUninstaller($selected_drive,$release_number)
+
+			If (GUICtrlRead($hide_files) == $GUI_CHECKED) Then Hide_live_files($selected_drive)
+
+			If GUICtrlRead($virtualbox) == $GUI_CHECKED And $virtualbox_check >= 1 Then
+
+				If $virtualbox_check <> 2 Then Check_virtualbox_download()
+
+				; maybe check downloaded file ?
+
+				; Next step : uncompressing vbox on the key
+				Uncompress_virtualbox_on_key($selected_drive)
+
+				UpdateStatus("Applying VirtualBox settings")
+				Setup_RAM_for_VM($selected_drive,$release_number)
+
+				;Run($selected_drive & "\Portable-VirtualBox\Launch_usb.exe", @ScriptDir, @SW_HIDE)
+
+			EndIf
+
 		EndIf
-
-		If (GUICtrlRead($hide_files) == $GUI_CHECKED) Then Hide_live_files($selected_drive)
-
-		If GUICtrlRead($virtualbox) == $GUI_CHECKED And $virtualbox_check >= 1 Then
-
-			If $virtualbox_check <> 2 Then Check_virtualbox_download()
-
-			; maybe check downloaded file ?
-
-			; Next step : uncompressing vbox on the key
-			Uncompress_virtualbox_on_key($selected_drive)
-
-			UpdateStatus("Applying VirtualBox settings")
-			Setup_RAM_for_VM($selected_drive,$release_number)
-
-			;Run($selected_drive & "\Portable-VirtualBox\Launch_usb.exe", @ScriptDir, @SW_HIDE)
-
-		EndIf
-
-
 
 		; Creation is now done
 		UpdateStatus("Your LinuxLive key is now up and ready !")
@@ -834,49 +856,29 @@ Func GUI_Launch_Creation()
 		If GUICtrlRead($virtualbox) == $GUI_CHECKED And $virtualbox_check >= 1 Then Final_check()
 
 		Sleep(1000)
+		; Don't want it to show when using test builds
+		if ReadSetting("General","unique_ID")<>"SVN" OR ReadSetting("Advanced","skip_finalhelp")="no" Then
+			ShellExecute("http://www.linuxliveusb.com/using-lili.html", "", "", "", 7)
+		EndIf
 
+		; If beta version, asking for feedback
+		If isBeta() AND ReadSetting("Advanced","skip_feedback_for_beta")="no" Then
+			Ask_For_Feedback()
+		EndIf
 
-		;Final_Help($selected_drive)
-		ShellExecute("http://www.linuxliveusb.com/using-lili.html", "", "", "", 7)
-		If isBeta() Then Ask_For_Feedback()
 	Else
 		UpdateStatus("Please validate step 1 to 3")
 	EndIf
 	SendReport("End-GUI_Launch_Creation")
 EndFunc   ;==>GUI_Launch_Creation
 
-Func Final_Help($selected_drive)
-	SendReport("Start-Final_Help (Drive : " & $selected_drive & " )")
-	$gui_finish = GUICreate(Translate("Your LinuxLive key is now up and ready !"), 604, 378, -1, -1)
-	GUISetOnEvent($GUI_EVENT_CLOSE, "GUI_Events2")
-	GUISetOnEvent($GUI_EVENT_MINIMIZE, "GUI_Events2")
-	GUISetOnEvent($GUI_EVENT_RESTORE, "GUI_Events2")
-	GUICtrlCreatePic(@ScriptDir & "\tools\img\tuto.jpg", 350, 0, 254, 378)
-	$printme = @CRLF & @CRLF & @CRLF & @CRLF & "  " & Translate("Your LinuxLive key is now up and ready !") _
-			 & @CRLF & @CRLF & "    " & Translate("In order to launch LinuxLive :") _
-			 & @CRLF & "    " & Translate("Remove your key and insert it again.") _
-			 & @CRLF & "    " & Translate("Go to 'My Computer'") _
-			 & @CRLF & "    " & Translate("Right click on you key and select :") & @CRLF
-
-	If FileExists($selected_drive & "\VirtualBox\Virtualize_This_Key.exe") And FileExists($selected_drive & "VirtualBox\VirtualBox.exe") Then
-		$printme &= @CRLF & "    " & "-> " & Translate("'LinuxLive!' to launch linux in windows")
-		$printme &= @CRLF & "    " & "-> " & Translate("'VirtualBox Interface' to launch VirtualBox full interface")
-	EndIf
-	$printme &= @CRLF & "    " & "-> " & Translate("'CD Menu' to launch the original CD menu")
-	GUICtrlCreateLabel($printme, 0, 0, 350, 378)
-	GUICtrlSetBkColor(-1, 0x0ffffff)
-	GUICtrlSetFont(-1, 10, 600)
-	GUISetState(@SW_SHOW)
-	SendReport("End-Final_Help")
-EndFunc   ;==>Final_Help
 
 Func Ask_For_Feedback()
-	$return = MsgBox(65, "Help me to improve LiLi", "This is a Beta or RC version, click OK to leave a feedback or click Cancel to close this window")
+	$return = MsgBox(65, Translate("Help me to improve LiLi"), Translate("This is a Beta or Release Candidate version")&"."&@CRLF&Translate("Click OK to leave a feedback or click Cancel to close this window"))
 	If $return = 1 Then ShellExecute("http://www.linuxliveusb.com/feedback/?version="&$software_version, "", "", "", 7)
 EndFunc   ;==>Ask_For_Feedback
 
 Func GUI_Events()
-
 	SendReport("Start-GUI_Events (GUI_CtrlID=" & @GUI_CtrlId & " )")
 	Select
 		Case @GUI_CtrlId = $GUI_EVENT_CLOSE
@@ -939,6 +941,8 @@ EndFunc   ;==>GUI_Help_Step4
 
 Func GUI_Help_Step5()
 	SendReport("Start-GUI_Help_Step5")
-	_About(Translate("About this software"), "LiLi USB Creator", "CopyLeft by Thibaut Lauzière - GPL v3 License", $software_version, Translate("User's Guide"), "http://www.linuxliveusb.com/how-to.html", Translate("Homepage"), "http://www.linuxliveusb.com", Translate("Donate"), "https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=8297661", @AutoItExe, 0x0000FF, 0xFFFFFF, -1, -1, -1, -1, $CONTROL_GUI)
+	;_About(Translate("About this software"), "LiLi USB Creator", "CopyLeft by Thibaut Lauzière - GPL v3 License", $software_version, Translate("User's Guide"), "http://www.linuxliveusb.com/how-to.html", Translate("Homepage"), "http://www.linuxliveusb.com", Translate("Donate"), "https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=8297661", @AutoItExe, 0x0000FF, 0xFFFFFF, -1, -1, -1, -1, $CONTROL_GUI)
+	GUI_Options_Menu()
+	;DebugOptions()
 	SendReport("End-GUI_Help_Step5")
 EndFunc   ;==>GUI_Help_Step5

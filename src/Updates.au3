@@ -16,40 +16,42 @@
 
 ; Check for LiLi's updates
 Func Check_for_updates()
-	If IniRead($settings_ini, "Updates", "check_for_updates", "yes") = "no" Then Return 0
+	If ReadSetting("Updates", "check_for_updates") <> "yes" Then Return 0
 	$ping = Ping("www.google.com")
 	If $ping Then
-
 		; check for stable version update
-		$check_result = _INetGetSource($check_updates_url & "?version")
+		$check_result = BinaryToString(INetRead($check_updates_url & "?version"))
 
 		; if Beta version check for beta version update too
-		if (isBeta() OR IniRead($settings_ini, "Updates", "check_for_beta_versions", "no") = "yes") Then $check_result_beta = _INetGetSource($check_updates_url & "?beta-version")
+		if (ReadSetting( "Updates", "check_for_beta_versions") = "yes") Then $check_result_beta = BinaryToString(INetRead($check_updates_url & "?beta-version"))
 
-		if (isBeta() OR IniRead($settings_ini, "Updates", "check_for_beta_versions", "no") = "yes") AND VersionCompare($check_result_beta, $software_version) = 1 Then
-			; New beta version available
+		if (ReadSetting( "Updates", "check_for_beta_versions") = "yes") AND VersionCompare($check_result_beta, $software_version) = 1  And Not $check_result_beta = 0 And Not $check_result_beta ="" Then
+			UpdateLog("New beta version available")
 			$return = MsgBox(68, Translate("There is a new Beta version available"), Translate("Your LiLi's version is not up to date.") & @CRLF & @CRLF & Translate("Last beta version is") & " : " & $check_result_beta & @CRLF & Translate("Your version is") & " : " & $software_version & @CRLF & @CRLF & Translate("Do want to download it ?"))
 			If $return = 6 Then ShellExecute("http://www.linuxliveusb.com/")
-		ElseIf Not $check_result = 0 And VersionCompare($check_result, $software_version) = 1 Then
-			; New stable version available
+		ElseIf Not $check_result = 0 And Not $check_result ="" And VersionCompare($check_result, $software_version) = 1 Then
+			UpdateLog("New stable version available")
 			$return = MsgBox(68, Translate("There is a new version available"), Translate("Your LiLi's version is not up to date.") & @CRLF & @CRLF & Translate("Last version is") & " : " & $check_result & @CRLF & Translate("Your version is") & " : " & $software_version & @CRLF & @CRLF & Translate("Do want to download it ?"))
 			If $return = 6 Then ShellExecute("http://www.linuxliveusb.com/")
+		Else
+			UpdateLog("Current software version is up to date")
 		EndIf
-	else
-		;SendReport("no checking : "&$ping)
+	Else
+		UpdateLog("WARNING : Could not check for updates (no connection ?)")
 	EndIf
 EndFunc   ;==>Check_for_updates
 
-; Check for compatibility list updates
+; Check for compatibility list updates (called in Automatic_Bug_Report.au3 in second process)
 Func Check_for_compatibility_list_updates()
 		; Current version
 		$current_compatibility_list_version=IniRead($compatibility_ini, "Compatibility_List", "Version","none")
 
 		; Check the available version
-		$available_version = _InetGetSource($check_updates_url & "?last_compatibility_list_of="&$software_version)
+		$available_version = BinaryToString(INetRead($check_updates_url & "?last_compatibility_list_of="&$software_version))
 
 		; Compare with the current version
 		if VersionCodeForCompatList($current_compatibility_list_version) < VersionCodeForCompatList($available_version) Then
+			UpdateLog("New compatibility version found : "&$available_version)
 			; There is a new version => Downloading it to new_compatibility_list.ini
 			InetGet($check_updates_url&"compatibility_lists/"&$available_version, @ScriptDir &"\tools\settings\new_compatibility_list.ini")
 
@@ -59,11 +61,15 @@ Func Check_for_compatibility_list_updates()
 				FileMove(@ScriptDir &"\tools\settings\new_compatibility_list.ini",$compatibility_ini,1)
 				; Send a message to the main process to force reloading the file
 				SendReportToMain("compatibility_updated")
-				$new_linux = _InetGetSource($check_updates_url & "?new-linux-since="&$current_compatibility_list_version)
+				$new_linux = BinaryToString(INetRead($check_updates_url & "?new-linux-since="&$current_compatibility_list_version))
 				MsgBox(64, "LinuxLive USB Creator", Translate("The compatibility list has been updated")&"."&@CRLF&@CRLF&Translate("These linuxes are now supported")&" :"&@CRLF&@CRLF&$new_linux);
-
+			Else
+				UpdateLog("WARNING : Could not download new compatibility list version")
 			EndIf
+		Else
+			UpdateLog("Current compatibility list version is up to date")
 		EndIf
+
 EndFunc
 
 
@@ -115,7 +121,7 @@ Func VersionCode($version)
 	Else
 		$version_number &= "8"
 	EndIf
-	Return $version_number
+	Return Int($version_number)
 EndFunc   ;==>VersionCode
 
 Func isBeta()
@@ -129,11 +135,11 @@ EndFunc   ;==>isBeta
 ; Return the last number of compatibility list version
 Func VersionCodeForCompatList($version)
 	$parse_version = StringSplit($version, ".")
-	Return $parse_version[Ubound($parse_version)-1]
+	Return Int($parse_version[Ubound($parse_version)-1])
 EndFunc   ;==>VersionCode
 
 
 ; Return a generic version code for some Linuxes (Ubuntu mostly)
 Func GenericVersionCode($version)
-	Return StringReplace($version,".","")
+	Return Int(StringReplace($version,".",""))
 EndFunc

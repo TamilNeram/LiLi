@@ -3,36 +3,39 @@
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Func DirRemove2($arg1, $arg2)
-	SendReport("Start-DirRemove2 ( " & $arg1 & " )")
-	UpdateLog("Deleting folder : " & $arg1)
+	Local $status="Deleting folder : " & $arg1
 	If DirRemove($arg1, $arg2) Then
-		UpdateLog("                   " & "Folder deleted")
+		$status &=" -> " & "Deleted successfully"
 	Else
 		If DirGetSize($arg1) >= 0 Then
-			UpdateLog("                   " & "Error while deleting")
+			$status &=" -> " & "Not deleted"
 		Else
-			UpdateLog("                   " & "Folder not found")
+			Return 1
 		EndIf
 	EndIf
-	SendReport("End-DirRemove2")
+	UpdateLog($status)
 EndFunc   ;==>DirRemove2
 
 Func FileDelete2($arg1)
-	SendReport("Start-FileDelete2 ( " & $arg1 & " )")
-	UpdateLog("Deleting file : " & $arg1)
+	Local $status="Deleting file : " & $arg1
 	If FileDelete($arg1) == 1 Then
-		UpdateLog("                   " & "File deleted")
+		$status &=" -> " & "Deleted successfully"
 	Else
 		If FileExists($arg1) Then
-			UpdateLog("                   " & "Error while deleting")
+			$status &=" -> " & "Not Deleted"
 		Else
-			UpdateLog("                   " & "File not found")
+			Return 1
 		EndIf
 	EndIf
-	SendReport("End-FileDelete2")
+	UpdateLog($status)
 EndFunc   ;==>FileDelete2
 
 Func HideFilesInDir($list_of_files)
+	SendReport("Start-HideFilesInDir")
+	if (Ubound($list_of_files)=0) Then
+		SendReport("End-HideFilesInDir : list of files is not an array !")
+		return "ERROR"
+	EndIf
 	For $file In $list_of_files
 		HideFile($selected_drive & "\" & $file)
 	Next
@@ -59,46 +62,46 @@ Func DeleteFilesInDir($list_of_files)
 EndFunc   ;==>DeleteFilesInDir
 
 Func HideFile($file_or_folder)
-	SendReport("Start-HideFile ( " & $file_or_folder & " )")
-	UpdateLog("Hiding file : " & $file_or_folder)
+	Local $status="Hiding file : " & $file_or_folder
+
 	If FileSetAttrib($file_or_folder, "+SH") == 1 Then
-		UpdateLog("                   " & "File hided")
+		$status &=" -> " &"Hided successfully"
 	Else
 		If FileExists($file_or_folder) Then
-			UpdateLog("                   " & "File not found")
+			$status &=" -> " & "Not hided"
 		Else
-			UpdateLog("                   " & "Error while hiding")
+			return 1
 		EndIf
 	EndIf
-	SendReport("End-HideFile")
+	UpdateLog($status)
 EndFunc   ;==>HideFile
 
 Func ShowFile($file_or_folder)
-	SendReport("Start-HideFile ( " & $file_or_folder & " )")
-	UpdateLog("Showing file : " & $file_or_folder)
+	Local $status="Unhiding file : " & $file_or_folder
 	If FileSetAttrib($file_or_folder, "-SH") == 1 Then
-		UpdateLog("                   " & "File showed")
+		$status &=" -> " &"Unhided successfully"
 	Else
 		If FileExists($file_or_folder) Then
-			UpdateLog("                   " & "File not showed")
+			$status &=" -> " & "Not hided"
 		Else
-			UpdateLog("                   " & "Error while showing")
+			return 1
 		EndIf
 	EndIf
-	SendReport("End-HideFile")
+	UpdateLog($status)
 EndFunc   ;==>ShowFile
 
 Func FileRename($file1, $file2)
-	SendReport("Start-FileRename ( " & $file1 & "-->" & $file2 & " )")
-	UpdateLog("Renaming File : " & $file1 & "-->" & $file2)
-
+	Local $status="Renaming File : " & $file1 & " in " & $file2
 	If FileMove($file1, $file2, 1) == 1 Then
-		UpdateLog("                   File renamed successfully")
+		$status &=" -> " & "File renamed successfully"
 	Else
-		UpdateLog("                   Error : " & $file1 & " cannot be moved")
+		if FileExists($file1) Then
+			$status &=" -> " & "Not renamed"
+		Else
+			Return 1
+		EndIf
 	EndIf
-
-	SendReport("End-FileRename")
+	UpdateLog($status)
 EndFunc   ;==>FileRename
 
 Func FileCopyShell($fromFile, $tofile)
@@ -111,37 +114,92 @@ Func FileCopyShell($fromFile, $tofile)
 EndFunc   ;==>_FileCopy
 
 Func FileCopy2($arg1, $arg2)
-	SendReport("Start-_FileCopy2 ( " & $arg1 & " -> " & $arg2 & " )")
-	UpdateLog("Copying file(s) " & $arg1 & " to " & $arg2)
+	Local $status="Copying File : " & $arg1 & " to " & $arg2
 	If FileCopy($arg1, $arg2,1) Then
-		UpdateLog("                   File copied successfully")
+		$status &=" -> " &"Copied successfully"
 	Else
-		UpdateLog("                   Error : " & $arg1 & " has not been copied")
+		if FileExists($arg1) Then
+			$status &=" -> " & "Not copied"
+		Else
+			Return 1
+		EndIf
 	EndIf
-	SendReport("End-_FileCopy2")
+	UpdateLog($status)
 EndFunc   ;==>_FileCopy2
 
+Func GetPreviousInstallSizeMB($drive_letter)
+	SendReport("Start-GetPreviousInstallSizeMB for drive "&$drive_letter)
+	Local $array,$array2
+	if FileExists($drive_letter&"\"&$autoclean_settings) Then
+		$array=IniReadSection($drive_letter&"\"&$autoclean_settings,"Files")
+		$total=0
+		if Ubound($array) > 1 Then
+			for $i=1 To Ubound($array)-1
+				$total+=FileGetSize($drive_letter&"\"&$array[$i][0])
+			Next
+		EndIf
 
+		$array2=IniReadSection($drive_letter&"\"&$autoclean_settings,"Folders")
+		if Ubound($array2) > 1 Then
+			for $i=1 To Ubound($array2)-1
+				$total+=DirGetSize($drive_letter&"\"&$array2[$i][0]&"\")
+			Next
+		EndIf
+		SendReport("End-GetPreviousInstallSizeMB ( Previous install : "&Round($total/(1024*1024),1)& " MB")
+		Return Round($total/(1024*1024),0)
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func AddToSmartClean($drive_letter,$file_to_smartclean)
+	if FileExists($drive_letter&"\"&$file_to_smartclean) AND _ArraySearch($files_in_source,$file_to_smartclean)=-1  Then _ArrayAdd($files_in_source,$file_to_smartclean)
+EndFunc
+
+Func SmartCleanPreviousInstall($drive_letter)
+	SendReport("Start-AutoCleanPreviousInstall for drive "&$drive_letter)
+	Local $array,$i
+	if FileExists($drive_letter&"\"&$autoclean_settings) Then
+		$installed_linux=IniRead($drive_letter&"\"&$autoclean_settings,"General","Installed_Linux","NotFound")
+		$linux_codename=IniRead($drive_letter&"\"&$autoclean_settings,"General","Installed_Linux_Codename","NotFound")
+		$install_size=GetPreviousInstallSizeMB($drive_letter)
+		$array=IniReadSection($drive_letter&"\"&$autoclean_settings,"Files")
+		SendReport("Found a previous install of "&$install_size&"MB to SmartClean : "&$installed_linux&"("&$linux_codename&")")
+		SendReport("Found "&(Ubound($array)-1)&" files to delete")
+		if Ubound($array) > 1 Then
+			for $i=1 To Ubound($array)-1
+				if $array[$i][0] <> $autoclean_settings Then FileDelete2($drive_letter&"\"&$array[$i][0])
+			Next
+		EndIf
+
+		$array=IniReadSection($drive_letter&"\"&$autoclean_settings,"Folders")
+		SendReport("Found "&(Ubound($array)-1)&" folders to delete")
+		if Ubound($array) > 1 Then
+			for $i=1 To Ubound($array)-1
+				DirRemove2($drive_letter&"\"&$array[$i][0],1)
+			Next
+		EndIf
+		FileDelete2($drive_letter&"\"&$autoclean_settings)
+		SendReport("End-AutoCleanPreviousInstall (found autoclean.ini)")
+		Return 1
+	Elseif Ubound($files_in_source>0) Then
+		DeleteFilesInDir($files_in_source)
+		SendReport("End-AutoCleanPreviousInstall (no autoclean.ini -> deleting listed files)")
+		Return 0
+	Else
+		SendReport("End-AutoCleanPreviousInstall : WARNING (no autoclean.ini and no file list)")
+		Return 0
+	EndIf
+EndFunc
 
 Func InitializeFilesInSource($path)
 	If isDir($path) == 1 Then
-		InitializeFilesInCD($path)
+		return InitializeFilesInCD($path)
 	Else
-		InitializeFilesInISO($path)
+		return InitializeFilesInISO($path)
 	EndIf
 EndFunc   ;==>InitializeFilesInSource
 
-; Create a list of files in ISO
-Func InitializeFilesInISO($iso_to_list)
-	SendReport("Start-InitializeFilesInISO ( " & $iso_to_list &")")
-	If ProcessExists("7z.exe") > 0 Then ProcessClose("7z.exe")
-	FileDelete(@ScriptDir & "\tools\filelist.txt")
-	$cmd=@ComSpec & " /c " & '7z.exe' & ' l -slt "' & $iso_to_list & '" > filelist.txt'
-	$foo = RunWait($cmd, @ScriptDir & "\tools\", @SW_HIDE)
-	SendReport("IN-InitializeFilesInISO : command executed -> " &@CRLF& @ComSpec & " /c " & '7z.exe' & ' l -slt "' & $iso_to_list & '" > filelist.txt')
-	AnalyzeFileList()
-	SendReport("End-InitializeFilesInISO")
-EndFunc   ;==>InitializeFilesInISO
 
 ; Analyze the listfile and only select files and folders at the root (will be used to clean previous installs and hide the newly created)
 Func AnalyzeFileList()

@@ -13,7 +13,21 @@
 Func Format_FAT32($drive_letter)
 	SendReport("Start-Format_FAT32 ( Drive : "& $drive_letter &" )")
 	UpdateStatus("Formating the key")
-	RunWait3('cmd /c format /Q /X /y /V:MyLinuxLive /FS:FAT32 ' & $drive_letter, @ScriptDir, @SW_HIDE)
+	$drive_size=Round(DriveSpaceTotal($drive_letter)/1024,1)
+	if $drive_size<32 AND ReadSetting( "Advanced", "force_3rdparty_format") <> "yes" Then
+		UpdateLog("Drive is smaller than 32GB ("&$drive_size&"GB)-> LiLi will use the Windows Format utility")
+		; default Method, will force work even when some applications are locking the drive
+		RunWait3('cmd /c format /Q /X /y /V:MyLinuxLive /FS:FAT32 ' & $drive_letter)
+	Else
+		; Alternative method using fat32format for filesystems bigger than 32GB
+		if ReadSetting( "Advanced", "force_3rdparty_format") = "yes" Then
+			UpdateLog("force_3rdparty_format="&ReadSetting( "Advanced", "force_3rdparty_format")&" -> LiLi will use the Third party format utility")
+		Else
+			UpdateLog("Drive is bigger than 32GB ("&$drive_size&"GB) and force_3rdparty_format="&ReadSetting( "Advanced", "force_3rdparty_format")&"-> LiLi will use the Third party format utility")
+		EndIf
+		FAT32Format($drive_letter,"MyLinuxLive")
+	EndIf
+
 	SendReport("End-Format_FAT32")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -32,15 +46,26 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Clean_old_installs($drive_letter,$release_in_list)
-	If IniRead($settings_ini, "Advanced", "skip_cleaning", "no") = "yes" Then Return 0
+	If ReadSetting( "Advanced", "skip_cleaning") = "yes" Then Return 0
 	SendReport("Start-Clean_old_installs ( Drive : "& $drive_letter &" - Release : "& $release_in_list &" )")
 	UpdateStatus("Cleaning previous installations ( 2min )")
-	DeleteFilesInDir($files_in_source)
+
+	if SmartCleanPreviousInstall($drive_letter)=1 Then
+		SendReport("End-Clean_old_installs -> Autocleaning successful")
+		Return 1
+	Else
+		SendReport("IN-Clean_old_installs -> Autocleaning not working, now using the old alertnative method")
+	EndIf
+
+
 	If FileExists($drive_letter & "\autorun.inf") AND NOT FileExists($drive_letter & "\autorun.inf.orig") Then FileMove($drive_letter & "\autorun.inf",$drive_letter & "\autorun.inf.orig",1)
 	FileDelete2($drive_letter & "\autorun.inf")
 	FileDelete2($drive_letter & "\lili.ico")
 
-	if IniRead($settings_ini, "Advanced", "skip_full_cleaning", "no") <> "yes" Then
+	FileDelete2($drive_letter&"\"&$autoclean_settings)
+	FileDelete2($drive_letter&"\"&$autoclean_file)
+
+	if ReadSetting( "Advanced", "skip_full_cleaning") <> "yes" Then
 
 		; Common Linux Live files
 		DirRemove2($drive_letter & "\isolinux\", 1)
@@ -99,10 +124,7 @@ Func Clean_old_installs($drive_letter,$release_in_list)
 		FileDelete2($drive_letter & "\menu.lst")
 		FileDelete2($drive_letter & "\BootCD.txt")
 		DirRemove2($drive_letter & "\HBCD\",1)
-
-
 	EndIf
-
 	SendReport("End-Clean_old_installs")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -124,14 +146,14 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Download_virtualBox()
+	Global $current_download
 	SendReport("Start-Download_virtualBox")
 				UpdateStatus("Setting up virtualization software")
 				$no_internet = 0
 				$virtualbox_size = -1
 
-				$VirtualBoxUrl1 = IniRead($settings_ini, "VirtualBox", "portable_virtualbox_mirror1", "none")
-				$VirtualBoxUrl2 = IniRead($settings_ini, "VirtualBox", "portable_virtualbox_mirror2", "none")
-
+				$VirtualBoxUrl1 = ReadSetting("VirtualBox", "portable_virtualbox_mirror1")
+				$VirtualBoxUrl2 = ReadSetting("VirtualBox", "portable_virtualbox_mirror2")
 
 				; Testing download mirrors
 				$virtualbox_size1 = InetGetSize($VirtualBoxUrl1)
@@ -167,23 +189,23 @@ Func Download_virtualBox()
 
 				$virtualbox_already_downloaded = 0
 				SendReport("Start-Download_virtualBox-2")
-				;cs
+
 				; Checking if last version has aleardy been downloaded
 				If FileExists(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) And $virtualbox_size > 0 And $virtualbox_size = FileGetSize(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) Then
 					; Already have last version, no download needed
 					UpdateStatus("VirtualBox already downloaded")
-					Sleep(1000)
+					Sleep(700)
 					$check_vbox = 2
 				ElseIf FileExists(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) And $virtualbox_size > 0 And $virtualbox_size <> FileGetSize(@ScriptDir & "\tools\" & $downloaded_virtualbox_filename) Then
 					; A new version is available, downloading it
 					UpdateStatus("A new version of VirtualBox is available")
-					Sleep(1000)
+					Sleep(700)
 					UpdateStatus("This new version will be downloaded")
-					Sleep(1000)
+					Sleep(700)
 					UpdateStatus("Downloading VirtualBox as a background task")
-					Sleep(1000)
-					InetGet($VirtualBoxUrl, @ScriptDir & "\tools\" & $downloaded_virtualbox_filename, 1, 1)
-					If @InetGetActive Then
+					Sleep(700)
+					$current_download = InetGet($VirtualBoxUrl, @ScriptDir & "\tools\" & $downloaded_virtualbox_filename, 1, 1)
+					If InetGetInfo($current_download, 4)=0 Then
 						UpdateStatus("Download started succesfully")
 						$check_vbox = 1
 					Else
@@ -206,8 +228,8 @@ Func Download_virtualBox()
 					; Does not have any version, downloading it
 					UpdateStatus("Downloading VirtualBox as a background task")
 					Sleep(1000)
-					InetGet($VirtualBoxUrl, @ScriptDir & "\tools\" & $downloaded_virtualbox_filename, 1, 1)
-					If @InetGetActive Then
+					$current_download = InetGet($VirtualBoxUrl, @ScriptDir & "\tools\" & $downloaded_virtualbox_filename, 1, 1)
+					If InetGetInfo($current_download, 4)=0 Then
 						UpdateStatus("Download started succesfully")
 						Sleep(1000)
 						$check_vbox = 1
@@ -260,16 +282,23 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func Uncompress_ISO_on_key($drive_letter,$iso_file,$release_in_list)
-	If IniRead($settings_ini, "Advanced", "skip_copy", "no") = "yes" Then Return 0
+	If ReadSetting("Advanced", "skip_copy") = "yes" Then Return 0
 	SendReport("Start-Uncompress_ISO_on_key ( Drive : "& $drive_letter &" - File : "& $iso_file &" - Release : "& $release_in_list &" )")
 
 	If ProcessExists("7z.exe") > 0 Then ProcessClose("7z.exe")
 	UpdateStatus(Translate("Extracting ISO file on key") & " ( 5-10" & Translate("min") & " )")
 
+	#cs
 	if ReleaseGetCodename($release_in_list)="default" Then
 		$install_size=Round(FileGetSize($iso_file)/1048576)
 	Else
 		$install_size = ReleasegetInstallSize($release_number)
+	EndIf
+	#ce
+	if get_extension($iso_file)="iso" Then
+		$install_size=Round(FileGetSize($iso_file)/1048576)
+	Else
+		$install_size = ReleasegetInstallSize($release_in_list)
 	EndIf
 
 	; Just in case ...
@@ -298,7 +327,7 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func Create_Stick_From_CD($drive_letter,$path_to_cd)
-	If IniRead($settings_ini, "Advanced", "skip_copy", "no") = "yes" Then Return 0
+	If ReadSetting("Advanced", "skip_copy") = "yes" Then Return 0
 	SendReport("Start-Create_Stick_From_CD ( Drive : "& $drive_letter &" - CD Folder : "& $path_to_cd &" )")
 	FileCopyShell($path_to_cd & "\*.*", $drive_letter & "\")
 	SendReport("End-Create_Stick_From_CD")
@@ -325,7 +354,7 @@ Func Create_Stick_From_IMG($drive_letter,$img_file)
 
 	if NOT ($physical_disk_number <> "ERROR" AND $physical_disk_number >0 AND $physical_disk_number <> GiveMePhysicalDisk("C:")) Then
 		MsgBox(16,"Error","There was an error while trying to write IMG file to USB."&@CRLF&@CRLF&"Please contact debug-img@linuxliveusb.com."&@CRLF&@CRLF&"Thank You")
-		Return 0
+		Return -1
 	EndIf
 
 	$img_size= Ceiling(FileGetSize($img_file)/1048576)
@@ -350,12 +379,15 @@ Func Create_Stick_From_IMG($drive_letter,$img_file)
 		EndIf
 		Sleep(500)
 	Wend
-	UpdateLog($lines)
 	While 1
 		$errors &= StderrRead($foo)
 		If @error Then ExitLoop
 	WEnd
-	;if StringInStr($errors,"error") then MsgBox(0,"ERROR","An error occurred")
+	UpdateLog($lines&$errors)
+	if StringInStr($errors,"error") Then
+		UpdateStatus("An error occurred."&@CRLF&"Please close any application accessing your key and try again.")
+		Return -1
+	EndIf
 	SendReport("End-Create_Stick_From_IMG")
 EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -391,7 +423,7 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func Rename_and_move_files($drive_letter, $release_in_list)
-	If IniRead($settings_ini, "Advanced", "skip_moving_renaming", "no") = "yes" Then Return 0
+	If ReadSetting("Advanced", "skip_moving_renaming") = "yes" Then Return 0
 	SendReport("Start-Rename_and_move_files")
 	UpdateStatus(Translate("Renaming some files"))
 
@@ -420,27 +452,40 @@ Func Rename_and_move_files($drive_letter, $release_in_list)
 			$syslinux_path = $drive_letter & "\BOOT\SYSLINUX\"
 		Elseif FileExists($drive_letter & "\HBCD\isolinux.cfg") Then
 			$syslinux_path = $drive_letter & "\HBCD\"
+		Elseif FileExists($drive_letter & "\boot\i386\loader\isolinux.cfg") AND ReleaseGetVariant($release_in_list)="opensuse" Then
+			FileDelete($drive_letter&"\syslinux.cfg")
+			DirMove($drive_letter & "\boot\i386\loader", $drive_letter & "\boot\syslinux",1)
+			$syslinux_path = $drive_letter & "\boot\syslinux\"
 		Else
 			$syslinux_path = $drive_letter & "\"
 		EndIf
 		isolinux2syslinux($syslinux_path)
 
+	; Fix for Parted Magic > 4.6 (support is discontinued for 4.6)
+	If ReleaseGetVariant($release_in_list) ="pmagic"  Then
+		$search = FileFindFirstFile($drive_letter&"\pmagic-usb-*")
+		$search2 = FileFindFirstFile($drive_letter&"\pmagic-pxe-*")
+		; Check if the search was successful
+		If $search <> -1 Then
+			$pmagic_folder = FileFindNextFile($search)
+			SendReport("IN-Rename_and_move_files : Found pmagic USB folder (automatic) = "&$pmagic_folder)
+		ElseIf $search2 <> -1 Then
+			$pmagic_folder = FileFindNextFile($search2)
+			SendReport("IN-Rename_and_move_files : Found pmagic PXE folder (automatic) = "&$pmagic_folder)
+		Else
+			if GenericVersionCode(ReleaseGetVariantVersion($release_in_list)) > "52" Then
+				$look_for="pxe"
+			Else
+				$look_for="usb"
+			EndIf
+			$pmagic_folder="pmagic-"&$look_for&"-"&ReleaseGetVariantVersion($release_in_list)
+			SendReport("IN-Rename_and_move_files : Found pmagic folder (manual)= "&$pmagic_folder)
+		EndIf
 
-	; Fix for Parted Magic 4.6 & 4.9 & 4.10
-	If ReleaseGetVariant($release_in_list) ="pmagic" Then
-		DirMove( $drive_letter & "\pmagic-usb-4.6\boot", $drive_letter,1)
-		DirMove( $drive_letter & "\pmagic-usb-4.6\pmagic", $drive_letter,1)
-		FileMove($drive_letter & "\pmagic-usb-4.6\readme.txt",$drive_letter,1)
-		FileMove( $drive_letter & "\PMAGIC\MODULES\PMAGIC_4_6.SQFS", $drive_letter & "\PMAGIC\MODULES\pmagic-4.6.sqfs",1)
-		FileDelete( $drive_letter & "\pmagic-usb-4.6\")
-
-		DirMove( $drive_letter & "\pmagic-usb-4.9\boot", $drive_letter,1)
-		DirMove( $drive_letter & "\pmagic-usb-4.9\pmagic", $drive_letter,1)
-		FileDelete( $drive_letter & "\pmagic-usb-4.9\")
-
-		DirMove( $drive_letter & "\pmagic-usb-4.10\boot", $drive_letter,1)
-		DirMove( $drive_letter & "\pmagic-usb-4.10\pmagic", $drive_letter,1)
-		FileDelete( $drive_letter & "\pmagic-usb-4.10\")
+		DirMove( $drive_letter & "\"&$pmagic_folder&"\boot", $drive_letter,1)
+		DirMove( $drive_letter & "\"&$pmagic_folder&"\pmagic", $drive_letter,1)
+		FileSetAttrib($drive_letter & "\"&$pmagic_folder, "-R-A-H", 1)
+		DirRemove( $drive_letter & "\"&$pmagic_folder&"\",1)
 	EndIf
 
 	; fix for bootlogo too big of PCLinuxOS 2010
@@ -474,10 +519,7 @@ Func Create_boot_menu($drive_letter,$release_in_list)
 	$distribution = ReleaseGetDistribution($release_in_list)
 	$features=ReleaseGetSupportedFeatures($release_in_list)
 	if StringInStr($features,"default") = 0 Then
-		if $distribution = "ubuntu" Then
-			SendReport("IN-Create_boot_menu for Ubuntu")
-			Ubuntu_WriteTextCFG($drive_letter,$release_in_list)
-		Elseif $variant ="CentOS" Then
+		If $variant ="CentOS" Then
 			SendReport("IN-Create_boot_menu for CentOS")
 			CentOS_WriteTextCFG($drive_letter)
 		Elseif $distribution = "Fedora" Then
@@ -486,7 +528,22 @@ Func Create_boot_menu($drive_letter,$release_in_list)
 		Elseif $variant = "TinyCore" Then
 			SendReport("IN-Create_boot_menu for TinyCore")
 			TinyCore_WriteTextCFG($drive_letter)
+		Elseif $variant = "Aptosid" Then
+			SendReport("IN-Create_boot_menu for Aptosid")
+			Aptosid_WriteTextCFG($drive_letter)
+		Elseif $variant = "Sidux" Then
+			SendReport("IN-Create_boot_menu for Sidux")
+			Sidux_WriteTextCFG($drive_letter)
+		Elseif $distribution = "ubuntu" OR $variant= "mint" Then
+			SendReport("IN-Create_boot_menu for Ubuntu and Mint Debian")
+			Ubuntu_WriteTextCFG($drive_letter,$release_in_list)
 		EndIf
+	Elseif $variant = "opensuse" Then
+			SendReport("IN-Create_boot_menu for OpenSuse")
+			Set_OpenSuse_MBR_ID($drive_letter)
+	Else
+		SendReport("IN-Create_boot_menu for Regular Linux")
+		Default_WriteTextCFG($drive_letter)
 	EndIf
 	SendReport("End-Create_boot_menu")
 EndFunc
@@ -508,7 +565,7 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Hide_live_files($drive_letter)
-	If IniRead($settings_ini, "Advanced", "skip_hiding", "no") = "yes" Then return 0
+	If ReadSetting("Advanced", "skip_hiding") = "yes" Then return 0
 	SendReport("Start-Hide_live_files")
 
 	UpdateStatus("Hiding files")
@@ -519,6 +576,8 @@ Func Hide_live_files($drive_letter)
 	HideFile($drive_letter & "\autorun.bak")
 	HideFile($drive_letter & "\lili.ico")
 	HideFile($drive_letter & "\autorun.inf")
+
+	HideFile($drive_letter & "\" & $autoclean_settings)
 
 	; Fix for Parted Magic 4.6
 	If ReleaseGetVariant($release_number)="pmagic" Then
@@ -595,7 +654,7 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Create_persistence_file($drive_letter,$release_in_list,$persistence_size,$hide_it)
-	If IniRead($settings_ini, "Advanced", "skip_persistence", "no") = "yes" Then Return 0
+	If ReadSetting( "Advanced", "skip_persistence") = "yes" Then Return 0
 	SendReport("Start-Create_persistence_file")
 
 	; Checking if persistence is supported for this Linux
@@ -613,11 +672,30 @@ Func Create_persistence_file($drive_letter,$release_in_list,$persistence_size,$h
 		$distribe = ReleaseGetDistribution($release_in_list)
 		$variant = ReleaseGetVariant($release_in_list)
 
-		if StringInStr($distribe,"buntu") OR $variant="BackTrack" Then
+		if StringInStr($features,"ubuntu-persistence")<>0 Then
+			; Ubuntu
 			$persistence_file= $drive_letter & '\casper-rw'
-		Else
-			; fedora
+			AddToSmartClean($drive_letter,"casper-rw")
+		Elseif StringInStr($features,"sidux-persistence")<>0 Then
+			; Sidux
+			$persistence_file= $drive_letter &"\sidux\sidux-rw"
+			AddToSmartClean($drive_letter,"sidux")
+		Elseif StringInStr($features,"aptosid-persistence")<>0 Then
+			; Aptosid (ex-Sidux)
+			$persistence_file= $drive_letter &"\aptosid\aptosid-rw"
+			AddToSmartClean($drive_letter,"aptosid")
+		Elseif StringInStr($features,"fedora-persistence")<>0 Then
+			; Fedora
 			$persistence_file= $drive_letter & '\LiveOS\overlay-' & StringReplace(DriveGetLabel($drive_letter)," ", "_") & '-' & Get_Disk_UUID($drive_letter)
+			AddToSmartClean($drive_letter,"LiveOS")
+		Elseif StringInStr($features,"debian-persistence")<>0 Then
+			; Debian > 6.0
+			$persistence_file= $drive_letter & '\live-rw'
+			AddToSmartClean($drive_letter,"live-rw")
+		Else
+			; Default mode is Ubuntu
+			$persistence_file= $drive_letter & '\casper-rw'
+			AddToSmartClean($drive_letter,"casper-rw")
 		Endif
 
 		Create_Empty_File($persistence_file, $persistence_size)
@@ -671,24 +749,12 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Func Install_boot_sectors($drive_letter,$release_in_list,$hide_it)
-	If IniRead($settings_ini, "Advanced", "skip_bootsector", "no") = "yes" Then Return 0
+	If ReadSetting( "Advanced", "skip_bootsector") = "yes" Then Return 0
 	SendReport("Start-Install_boot_sectors")
 	UpdateStatus("Installing boot sectors")
 	$features=ReleaseGetSupportedFeatures($release_in_list)
 	if StringInStr($features,"grub") > 0 OR NOT isSyslinuxCfgPresent($drive_letter) Then
 		UpdateLog("Variant is using GRUB loader")
-		#cs
-		 ----------------- Old GRUB Mode, abandoned because the other way is easier and works better
-		Security : does not install MBR sectors if on C: OR first physical disk OR if there is an error
-		$physical_disk_number=GiveMePhysicalDisk($drive_letter)
-
-		if $physical_disk_number <> "ERROR" AND StringIsInt($physical_disk_number) AND $physical_disk_number >0 AND $physical_disk_number <> GiveMePhysicalDisk("C:") Then
-			RunWait3('"' & @ScriptDir & '\tools\grubinst.exe" -v --skip-mbr-test (hd'& $physical_disk_number&')', @ScriptDir, @SW_HIDE)
-			FileCopy2(@ScriptDir & '\tools\grldr',$drive_letter & "\grldr")
-		Else
-			UpdateStatus("Error while trying to find physical disk number")
-		EndIf
-		#ce
 
 		; Syslinux will chainload GRUB loader
 		DirCreate($drive_letter &"\syslinux")
@@ -700,8 +766,13 @@ Func Install_boot_sectors($drive_letter,$release_in_list,$hide_it)
 		EndIf
 	EndIf
 
-	; Installing the syslinux boot sectors
-	RunWait3('"' & @ScriptDir & '\tools\syslinux.exe" -maf -d ' & $drive_letter & '\syslinux ' & $drive_letter, @ScriptDir, @SW_HIDE)
+	; Installing the syslinux boot sectors using Syslinux 4 if feature is set.
+	if StringInStr($features,"syslinux4") > 0 Then
+		InstallSyslinux($drive_letter,4)
+	Else
+		InstallSyslinux($drive_letter,3)
+	EndIf
+	;RunWait3('"' & @ScriptDir & '\tools\syslinux.exe" -maf -d ' & $drive_letter & '\syslinux ' & $drive_letter, @ScriptDir, @SW_HIDE)
 
 	If ( $hide_it <> $GUI_CHECKED) Then ShowFile($drive_letter & '\ldlinux.sys')
 	SendReport("End-Install_boot_sectors")
@@ -725,12 +796,12 @@ EndFunc
 
 Func Check_virtualbox_download()
 	SendReport("Start-Check_virtualbox_download")
-	Global $virtualbox_size
-	While @InetGetActive
-		$prog = Int((100 * @InetGetBytesRead / $virtualbox_size))
-		UpdateStatusNoLog(Translate("Downloading VirtualBox") & "  : " & $prog & "% ( " & Round(@InetGetBytesRead / (1024 * 1024), 1) & "/" & Round($virtualbox_size / (1024 * 1024), 1) & " " & Translate("MB") & " )")
+	Global $virtualbox_size, $current_download
+	Do
+		$prog = Int((100 * InetGetInfo($current_download,0) / $virtualbox_size))
+		UpdateStatusNoLog(Translate("Downloading VirtualBox") & "  : " & $prog & "% ( " & Round(InetGetInfo($current_download,0) / (1024 * 1024), 1) & "/" & Round($virtualbox_size / (1024 * 1024), 1) & " " & Translate("MB") & " )")
 		Sleep(300)
-	WEnd
+	Until InetGetInfo($current_download, 2)
 	UpdateStatus("Download complete")
 	SendReport("End-Check_virtualbox_download")
 EndFunc
@@ -753,14 +824,37 @@ EndFunc
 
 Func Uncompress_virtualbox_on_key($drive_letter)
 	SendReport("Start-Uncompress_virtualbox_on_key")
+	Local $downloaded_version,$installed_version
 
-	; Cleaning previous install of VBox
-	UpdateStatus("Cleaning previous VirtualBox install")
-	DirRemove2($drive_letter & "\VirtualBox\", 1)
+	if FileExists($drive_letter&"\VirtualBox\") Then
+
+		; Portable-VirtualBox already installed, checking if older
+		DirRemove(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox",1)
+		RunWait3('"' & @ScriptDir & '\tools\7z.exe" x -y "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename & '" VirtualBox\Portable-VirtualBox\linuxlive\settings.ini',@ScriptDir & "\tools\")
+
+		if FileExists(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini") Then
+			$downloaded_version=IniRead(@ScriptDir&"\tools\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","3.0.0.0")
+			$installed_version=IniRead($drive_letter&"\VirtualBox\Portable-VirtualBox\linuxlive\settings.ini","General","pack_version","3.0.0.0")
+			SendReport("IN-Uncompress_virtualbox_on_key (downloaded pack="&$downloaded_version&" - installed pack="&$installed_version&")")
+			if GenericVersionCode($downloaded_version)<=GenericVersionCode($installed_version) Then
+				SendReport("End-Uncompress_virtualbox_on_key (Pack is up to date)")
+				Return "1"
+			Else
+				SendReport("IN-Uncompress_virtualbox_on_key (Pack needs to be updated)")
+			EndIf
+		Else
+			SendReport("IN-Uncompress_virtualbox_on_key (Warning : settings.ini not found)")
+		EndIf
+
+		; Cleaning previous install of VBox
+		UpdateStatus("Updating Portable-VirtualBox pack")
+		DirRemove2($drive_letter & "\VirtualBox\", 1)
+
+	EndIf
 
 	; Unzipping to the key
 	UpdateStatus(Translate("Extracting VirtualBox on key") & " ( 4" & Translate("min") & " )")
-	Run7zip2('"' & @ScriptDir & '\tools\7z.exe" x "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename & '" -r -aoa -o' & $drive_letter, 140)
+	Run7zip2('"' & @ScriptDir & '\tools\7z.exe" x "' & @ScriptDir & "\tools\" & $downloaded_virtualbox_filename & '" -r -aoa -y -o' & $drive_letter, 140)
 
 	; maybe check after ?
 	SendReport("End-Uncompress_virtualbox_on_key")
@@ -781,7 +875,7 @@ EndFunc
 #ce
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func Create_autorun($drive_letter,$release_in_list)
-	If IniRead($settings_ini, "Advanced", "skip_autorun", "no") = "yes" Then Return 0
+	If ReadSetting( "Advanced", "skip_autorun") = "yes" Then Return 0
 
 	SendReport("Start-Create_autorun")
 	If FileExists($drive_letter & "\autorun.inf") Then FileMove($drive_letter & "\autorun.inf",$drive_letter & "\autorun.bak",1)
@@ -823,7 +917,123 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#cs
+	Description : Creates The uninstaller
+	Input :
+		$drive_letter = Letter of the drive (pre-formated like "E:" )
+		$release_in_list = number of the release in the compatibility list (-1 if not present)
+	Output :
+		0 = sucess
+		1 = error see @error
+#ce
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Func CreateUninstaller($drive_letter,$release_in_list)
+	SendReport("Start-CreateUninstaller")
+	Global $files_in_source
+	$codename = ReleaseGetCodename($release_in_list)
+	$description = ReleaseGetDescription($release_in_list)
 
+	if (Ubound($files_in_source)=0) Then
+		SendReport("End-CreateUninstaller : list of files is not an array !")
+		return "ERROR"
+	EndIf
+
+	AddToSmartClean($drive_letter,"lili.ico")
+	AddToSmartClean($drive_letter,"autorun.inf")
+	AddToSmartClean($drive_letter,"autorun.inf.orig")
+	AddToSmartClean($drive_letter,"ldlinux.sys")
+	AddToSmartClean($drive_letter,"syslinux")
+	AddToSmartClean($drive_letter,"syslinux.cfg")
+
+	if ReleaseGetVariant($release_in_list)="pmagic" Then
+		AddToSmartClean($drive_letter,"pmagic")
+		AddToSmartClean($drive_letter,"boot")
+	EndIf
+	_ArrayAdd($files_in_source,$autoclean_settings)
+	_ArrayAdd($files_in_source,$autoclean_file)
+
+	$handle=FileOpen($drive_letter&"\"&$autoclean_file,2)
+
+	$intro="@echo off" _
+	&@CRLF&"rem This batch file was created by Thibaut Lauziere for LinuxLive USB Creator" _
+	&@CRLF&"rem More infos available at www.linuxliveusb.com" _
+	&@CRLF&"cls" _
+	&@CRLF&"echo -----------------------------------------------------------------" _
+	&@CRLF&"echo ----------- Welcome to LinuxLive Uninstaller --------------------" _
+	&@CRLF&"echo -----------------------------------------------------------------" _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo --------------------- WARNING! ---------------------------------" _
+	&@CRLF&"echo." _
+	&@CRLF&"echo This batch file will permanently remove LinuxLive from your key" _
+	&@CRLF&"echo." _
+	&@CRLF&"echo -----------------------------------------------------------------" _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&'set /P userchoice="Are you sure you want to remove Linux Live from your key (Y/N) ?"' _
+	&@CRLF&'if /i NOT "%userchoice%"=="y" goto:eof' _
+	&@CRLF&"cls" _
+	&@CRLF&"echo -----------------------------------------------------------------" _
+	&@CRLF&"echo -----------        Removal of LinuxLive      --------------------" _
+	&@CRLF&"echo -----------------------------------------------------------------" _
+	&@CRLF&"echo."&@CRLF
+	FileWrite($handle,$intro)
+
+	Local $total=0
+	For $file In $files_in_source
+		$current_file=$drive_letter & "\" & $file
+		$size_to_add=0
+		If isDir($current_file) Then
+			$size_to_add=DirGetSize($current_file)
+			IniWrite($drive_letter&"\"&$autoclean_settings,"Folders",$file,$size_to_add)
+			FileWriteLine($handle,"echo Removing folder : "&$file )
+			FileWriteLine($handle,"RMDIR /S /Q "&$file)
+		Elseif FileExists($current_file) Then
+			$size_to_add=FileGetSize($current_file)
+			IniWrite($drive_letter&"\"&$autoclean_settings,"Files",$file,$size_to_add)
+
+			; The Auto-Clean batch needs to be removed at the end
+			if $file <> $autoclean_file Then
+				FileWriteLine($handle,"echo Removing file : "&$file )
+				FileWriteLine($handle,"ATTRIB -H -S "&$file)
+				FileWriteLine($handle,"DEL /F /Q "&$file)
+			EndIf
+		EndIf
+		$total+=$size_to_add
+	Next
+
+	$outro="cls" _
+	&@CRLF&"echo -----------------------------------------------------------------" _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo --------- LinuxLive USB has been removed from your key  ----------" _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo." _
+	&@CRLF&"echo -----------------------------------------------------------------" _
+	&@CRLF&"pause" _
+	&@CRLF&"Removing uninstaller : "&$autoclean_file _
+	&@CRLF&"ATTRIB -H -S "&$autoclean_file _
+	&@CRLF&"DEL /F /Q "&$autoclean_file _
+	&@CRLF&":End"
+
+	FileWrite($handle,$outro)
+	FileCLose($handle)
+
+	IniWrite($drive_letter&"\"&$autoclean_settings,"General","Total_Size",$total)
+	IniWrite($drive_letter&"\"&$autoclean_settings,"General","Installed_Linux",$description)
+	IniWrite($drive_letter&"\"&$autoclean_settings,"General","Installed_Linux_Codename",$codename)
+	SendReport("End-CreateUninstaller")
+EndFunc   ;==>DeleteFilesInDir
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 #cs
@@ -850,7 +1060,7 @@ Func Setup_RAM_for_VM($drive_letter,$release_in_list)
 
 	$old_value = _StringBetween ($line, 'Memory RAMSize="', '"')
 
-	If $old_value[0] > 0 Then
+	If NOt @error AND isArray($old_value) AND $old_value[0] > 0 Then
 		$recommended_ram = ReleaseGetVBoxRAM($release_in_list)
 		UpdateStatus(Translate("Setting the memory to the recommended value")&" ( "& $recommended_ram&Translate("MB") & " )")
 		SendReport("IN-Setup_RAM_for_VM (Recommended settings found :"&$recommended_ram&" )")

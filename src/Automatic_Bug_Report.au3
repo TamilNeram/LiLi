@@ -20,28 +20,48 @@ Global Const $StructDef_COPYDATA = "dword none;dword count;ptr pointer"
 Global Const $WM_COPYDATA_MH = 0x4A
 
 ;Message Queue Setup
-Global $MHCallBackTimer = 200
+Global $MHCallBackTimer = 700
 Global $pTimerProc, $uiTimer
 Global $aMessageQueue[1]=[0]
 
 Global $last_config, $last_report,$sErrorMsg
 Global  $last_actions[30] = [ "" , "" , "" ,"" , "" , "" ,"" , "" , "" , "","" , "" , "" ,"" , "" , "" ,"" , "" , "" , "","" , "" , "" ,"" , "" , "" ,"" , "" , "" , "" ]
 Global $sending_status
-Global $current_logfile = @ScriptDir & "\logs\crash-report-" & @MDAY & "-" & @MON & "-" & @YEAR & " (" & @HOUR & "h" & @MIN & "s" & @SEC & ").log"
+Global $current_crashlog = @ScriptDir & "\logs\crash-report-" & @MDAY & "-" & @MON & "-" & @YEAR & " (" & @HOUR & "h" & @MIN & "s" & @SEC & ").log"
+Global $current_logfile = @ScriptDir & "\logs\" & @MDAY & "-" & @MON & "-" & @YEAR&".log"
 Global $user_system
 
 Global $oMyRet[2]
-Global $oMyError
+Global $oMyError,$crash_detected=0
 
 Global $iPID
 $lang = _Language()
 
-; Better if executed before running the main process
-Check_for_compatibility_list_updates()
+; Apply proxy settings
+$proxy_mode = ReadSetting( "Proxy", "proxy_mode")
+$proxy_url = ReadSetting( "Proxy", "proxy_url")
+$proxy_port = ReadSetting( "Proxy", "proxy_port")
+$proxy_username = ReadSetting( "Proxy", "proxy_username")
+$proxy_password = ReadSetting( "Proxy", "proxy_password")
 
-Opt("OnExitFunc", "CallBack_Exit")
+if $proxy_mode =2 Then
+	If $proxy_url <> "" AND  $proxy_port <> "" Then
+		$proxy_url &= ":" & $proxy_port
+		If $proxy_username <> "" Then
+			If $proxy_password <> "" Then
+				HttpSetProxy(2, $proxy_url, $proxy_username, $proxy_password)
+			Else
+				HttpSetProxy(2, $proxy_url, $proxy_username)
+			EndIf
+		Else
+			HttpSetProxy(2, $proxy_url)
+		EndIf
+	EndIf
+Else
+	HttpSetProxy($proxy_mode)
+EndIf
 
-
+OnAutoItExitRegister( "CallBack_Exit" )
 
 _OnAutoItError()
 
@@ -56,7 +76,6 @@ _OnAutoItError()
 
 ;   this function is made to be customized !
 Func _OnAutoItError()
-
     If StringInStr($CmdLineRaw,"/AutoIt3ExecuteScript") Then Return
     Opt("TrayIconHide",1)
     ;   run a second instance
@@ -65,15 +84,28 @@ Func _OnAutoItError()
     $sErrorMsg=""
 	$hwnd = _SetAsReceiver("lili-Reporter")
 	$myFunc = _SetReceiverFunction("_ReceiveReport")
-    ;   trap the error message
+
+	$timer_check=TimerInit()
+	$update_checked=0
+
+	;   trap the error message
     While 1
         $sErrorMsg&=StdoutRead($iPID)
         If @error Then ExitLoop
-        Sleep(1)
+		if TimerDiff($timer_check) > 10000 AND $update_checked=0 Then
+			Check_for_compatibility_list_updates()
+			$update_checked=1
+		EndIf
+        Sleep(1000)
     WEnd
-    If $sErrorMsg="" Then Exit
-
-
+    If StringStripWS($sErrorMsg, 8)="" Then
+		ProcessClose("LiLi USB Creator.exe")
+		Exit
+	EndIf
+	; Updating last log file with crash report
+	$report=ConstructReport()
+	_FileWriteLog($current_logfile,"!!!!!! Crash Detected : "&$sErrorMsg)
+	_FileWriteLog($current_crashlog,$report)
     GUICreate("LiLi USB Creator Automatic Bug Report",400,90,Default,Default,-2134376448);BitOR($WS_CAPTION,$WS_POPUP,$WS_SYSMENU)
     GUISetBkColor(0xE0DFE2)
         GUICtrlSetBkColor(GUICtrlCreateLabel("",1,1,398,1),0x41689E)
@@ -137,16 +169,16 @@ Func _OnAutoItError()
 			GUICtrlSetOnEvent(-1, "GUI_Err_Stop")
         $clos=GUICtrlCreateIcon("shell32.dll",240,249,63,16,16)
             GUICtrlSetCursor(-1,0)
-    GUISetState()
-    WinSetOnTop(@ScriptName,"",1)
+
     Opt("TrayIconHide",0)
     Opt("TrayAutoPause",0)
 
     TraySetToolTip("LiLi Creator Automatic Bug Report")
 	TraySetIcon(@ScriptDir&"\tools\img\lili.ico")
-
+    GUISetState()
+    WinSetOnTop("LiLi USB Creator Automatic Bug Report","",1)
     ;   choose action to be taken
-	If IniRead($settings_ini, "Advanced", "skip_autoreport", "no")=="no" Then
+	If ReadSetting("Advanced", "skip_autoreport")<>"yes" Then
 		If SendBug() <> "OK" Then
 			GUICtrlSetData($sending_status,Translate("Report status")& " : " & Translate("Error (not sent)"))
 		Else
@@ -155,14 +187,26 @@ Func _OnAutoItError()
 
 	Endif
 
-	; Updating last log file with crash report
-	_FileWriteLog($current_logfile,ConstructReport())
-
     While 1
 		Sleep(60000)
     Wend
 
 EndFunc
+
+#cs
+Func CheckIfRunningOrphaned()
+	If @Compiled Then
+		$list = ProcessList("LiLi USB Creator.exe")
+	Else
+		$list = ProcessList("AutoIT3.exe")
+	EndIf
+
+	if $crash_detected=0 AND $list[0][0]<2 Then
+		_ArrayDisplay($list)
+		Exit
+	EndIf
+EndFunc
+#ce
 
 Func GUI_Err_Debug()
 	If @Compiled=0 Then MsgBox(270400,Translate("Show bug report"),ConstructReport())
@@ -187,7 +231,7 @@ Func SendBug()
 	_WinHttpAddRequestHeaders($h_openRequest, "Content-Type: multipart/form-data; boundary=" & $HTTP_POST_BOUNDARY)
 
 	InitPostData()
-	AddPostData("REPORTER_ID",IniRead($settings_ini, "General", "unique_ID", "none"))
+	AddPostData("REPORTER_ID",ReadSetting( "General", "unique_ID"))
 	AddPostData("ERROR_MSG",$sErrorMsg)
 	AddPostData("SOFTWARE_VERSION",$software_version)
 	; Little fix for AutoIT 3.3.0.0
@@ -235,19 +279,20 @@ Func SendBug()
 EndFunc
 
 Func ConstructReport()
-	$temp = Translate("Error") & " :" & @CRLF & $sErrorMsg &  @CRLF & Translate("30 " & "dernières actions") & _
+	$temp = Translate("Error") & " :" & @CRLF & $sErrorMsg &  @CRLF & Translate("30 Last Actions") & _
 	": " & @CRLF & _ArrayToString($last_actions,@CRLF & "--> ") & @CRLF & $last_config  & @CRLF & _
-	Translate("Unique anonymous ID") &  ": " & IniRead($settings_ini, "General", "unique_ID", "none")
+	Translate("Unique anonymous ID") &  ": " & ReadSetting( "General", "unique_ID")
 	Return $temp
 EndFunc
 
 Func ConstructHTMLReport()
-	$temp = "<html><head></head><body><center><h3>Report ID : "& IniRead($settings_ini, "General", "unique_ID", "none") & "</h3></center><br/><h3><u>Erreur :</u></h3><br/><pre>" & $sErrorMsg & "</pre><br/><h3><u>30 dernières actions : </u></h3><pre>" & _
-	_ArrayToString($last_actions,@CRLF & "--> ")  &  "</pre><br/><h3><u>Configuration Système :</u></h3><pre>" & $last_config  & "</pre></body></html>"
+	$temp = "<html><head></head><body><center><h3>Report ID : "& ReadSetting( "General", "unique_ID") & "</h3></center><br/><h3><u>Error :</u></h3><br/><pre>" & $sErrorMsg & "</pre><br/><h3><u>30 last actions : </u></h3><pre>" & _
+	_ArrayToString($last_actions,@CRLF & "--> ")  &  "</pre><br/><h3><u>System configuration :</u></h3><pre>" & $last_config  & "</pre></body></html>"
 	Return $temp
 EndFunc
 
 Func SendReportToMain($report)
+	UpdateLog("Sending report to main GUI :"&$report)
 	_SendData($report, "lili-main")
 EndFunc   ;==>SendReport
 
@@ -257,13 +302,16 @@ Func _ReceiveReport($report)
 	ElseIf StringLeft($report, 6) = "stats-" Then
 		$stats = StringTrimLeft($report, 6)
 		InetGet("http://www.linuxliveusb.com/stats/?"&$stats,"",1,1)
-	ElseIf StringLeft($report, 8) = "logfile-" Then
-		$current_logfile = StringTrimLeft($report, 6)
+	;ElseIf StringLeft($report, 8) = "logfile-" Then
+	;	$current_logfile = StringTrimLeft($report, 6)
 	ElseIf StringLeft($report, 8) = "distrib-" Then
 		$distrib= StringTrimLeft($report, 8)
 		InetGet("http://www.linuxliveusb.com/stats/?distrib="&$distrib&"&id="&$anonymous_id,"",1,1)
 	ElseIf StringLeft($report, 17) = "check_for_updates" Then
 		Check_for_updates()
+		;Check_for_compatibility_list_updates()
+	ElseIf StringLeft($report, 12) = "End-GUI_Exit" Then
+		Exit
 	Else
 		ConsoleWrite($report & @CRLF)
 		$last_report = $report
@@ -430,6 +478,47 @@ Func _SetAsReceiver($vTitle)
 	$pTimerProc = DllCallbackRegister("_CALLBACKQUEUE", "none", "")
 	$uiTimer = DllCall("user32.dll", "uint", "SetTimer", "hwnd", 0, "uint", 0, "int", $MHCallBackTimer, "ptr", DllCallbackGetPtr($pTimerProc))
 	$uiTimer = $uiTimer[0]
+	Return $MHhwmd_Receiver
+
+EndFunc
+
+
+; #FUNCTION# ====================================================================================================================
+; Name...........: _SetAsReceiver
+; Description ...: Sets the script up to accept messages
+; Syntax.........: _SetAsReceiver($vTitle)
+; Parameters ....: $vTitle    - The Local_ReceiverID_Name
+; Return values .: Success    - Handle to the receiver window
+;                  Failure    - @error is set and the relevant message is displayed
+; Author ........: ChrisL
+; ===============================================================================================================================
+Func _SetAsReceiverNoCallback($vTitle)
+
+	If StringLen($vTitle) = 0 then
+		Msgbox(16 + 262144,"Message Handler Error","A Local_ReceiverID_Name must be specified." & @crlf & _
+			"Messages will not be received unless a unique Local_ReceiverID_Name is used!")
+		Return SetError(1,1,-1);Make sure the user has specified a title
+	EndIf
+
+	$vTitle &= $MHAdditionalIdentifier;add on our additionalIdentifier which is unlikely to be used exept by scripts using this UDF
+
+	If WInExists($vtitle) and WinGetHandle($vTitle) <> $MHhwmd_Receiver then ;already a window exists with this title and it's not ours highly unlikely unless 2 copies of the script are running
+		;Msgbox(16 + 262144,"ERROR", "Only run one LiLi USB Creator at a time please - PID :"&$iPID&"PID reporter:"&@AutoItPID )
+		if $iPID Then ProcessClose($iPID)
+		Exit
+		#cs
+		Msgbox(16 + 262144,"Message Handler Error","The Local_ReceiverID_Name " & StringTrimRight($vTitle,StringLen($MHAdditionalIdentifier)) & " already exists." & @crlf & _
+			"A unique Local_ReceiverID_Name must be specified." & @crlf & _
+			"Messages will not be received unless a unique Local_ReceiverID_Name is used!")
+		#ce
+		Return SetError(1,2,-1)
+	EndIf
+
+	$MHhwmd_Receiver = GUICreate($vTitle)
+	GUIRegisterMsg($WM_COPYDATA_MH, "_GUIRegisterMsgProc")
+	;$pTimerProc = DllCallbackRegister("_CALLBACKQUEUE", "none", "")
+	;$uiTimer = DllCall("user32.dll", "uint", "SetTimer", "hwnd", 0, "uint", 0, "int", $MHCallBackTimer, "ptr", DllCallbackGetPtr($pTimerProc))
+	;$uiTimer = $uiTimer[0]
 	Return $MHhwmd_Receiver
 
 EndFunc

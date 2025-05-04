@@ -1,44 +1,53 @@
 #NoTrayIcon
 #RequireAdmin
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
-#AutoIt3Wrapper_Version=Beta
 #AutoIt3Wrapper_icon=tools\img\lili.ico
 #AutoIt3Wrapper_Compression=3
 #AutoIt3Wrapper_UseUpx=n
 #AutoIt3Wrapper_Res_Comment=Enjoy !
 #AutoIt3Wrapper_Res_Description=Easily create a Linux Live USB
-#AutoIt3Wrapper_Res_Fileversion=2.5.88.35
+#AutoIt3Wrapper_Res_Fileversion=2.6.88.45
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=Y
 #AutoIt3Wrapper_Res_LegalCopyright=CopyLeft Thibaut Lauziere a.k.a Slÿm
 #AutoIt3Wrapper_Res_SaveSource=y
-#AutoIt3Wrapper_Res_Field=AutoIt Version|%AutoItVer%
 #AutoIt3Wrapper_Res_Field=Site|http://www.linuxliveusb.com
 #AutoIt3Wrapper_AU3Check_Parameters=-w 4
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
+
+; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+; ///////////////////////////////// About this software                           ///////////////////////////////////////////////////////////////////////////////
+; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 ; Author           : Thibaut Lauzière (Slÿm)
 ; Author's Website : www.slym.fr
 ; e-Mail           : contact@linuxliveusb.com
 ; License          : GPL v3.0
-; Version          : 2.5
 ; Download         : http://www.linuxliveusb.com
 ; Support          : http://www.linuxliveusb.com/bugs/
-; Compiled with    : AutoIT v3.3.0.0
+; Compiled with    : AutoIT v3.3.6.1
 
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////// Software constants and variables              ///////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ; Global constants
-Global Const $software_version = "2.5"
-Global $lang_ini = @ScriptDir & "\tools\languages\"
+Global Const $software_version = "2.6"
+Global $lang_folder = @ScriptDir & "\tools\languages\"
+Global $lang_ini
+Global $verbose_logging
 Global Const $settings_ini = @ScriptDir & "\tools\settings\settings.ini"
 Global Const $compatibility_ini = @ScriptDir & "\tools\settings\compatibility_list.ini"
 Global Const $blacklist_ini = @ScriptDir & "\tools\settings\black_list.ini"
 Global Const $log_dir = @ScriptDir & "\logs\"
+Global $logfile = $log_dir & @MDAY & "-" & @MON & "-" & @YEAR&".log"
 Global Const $check_updates_url = "http://www.linuxliveusb.com/updates/"
 
+; Auto-Clean feature (relative to the usb drive path)
+Global Const $autoclean_file = "Remove_LiLi.bat"
+Global Const $autoclean_settings = "SmartClean.ini"
+
 ; Global that will be set up later
-Global $lang, $anonymous_id,$logfile
+Global $lang, $anonymous_id
 
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////// Gui Buttons and Label                         ///////////////////////////////////////////////////////////////////////////////
@@ -98,10 +107,11 @@ Global $offsety0,$offsety3,$offsety4
 Global $step2_display_menu = 0
 
 ; Others Global vars
-Global $best_mirror, $iso_size, $filename
+Global $best_mirror, $iso_size, $filename, $temp_filename
 Global $MD5_ISO = "", $compatible_md5, $compatible_filename, $release_number = -1, $files_in_source, $prefetched_linux_list,$current_compatibility_list_version
 Global $foo
 Global $for_winactivate
+Global $current_download
 
 Global $selected_drive,$virtualbox_check,$virtualbox_size,$downloaded_virtualbox_filename
 Global $STEP1_OK, $STEP2_OK, $STEP3_OK
@@ -131,11 +141,6 @@ Opt("GUIOnEventMode", 1)
 ; Checking if Tools folder exists (contains tools and settings)
 If DirGetSize(@ScriptDir & "\tools\", 2) <> -1 Then
 
-	If Not FileExists($lang_ini) Then
-		MsgBox(48, "ERROR", "Language file not found !!!")
-		Exit
-	EndIf
-
 	If Not FileExists($compatibility_ini) Then
 		; If something went bad with auto-updating the compatibility list => trying to put back the old one
 		FileMove(@ScriptDir & "\tools\settings\old_compatibility_list.ini",$compatibility_ini)
@@ -150,29 +155,31 @@ If DirGetSize(@ScriptDir & "\tools\", 2) <> -1 Then
 		Exit
 	Else
 		; Generate an unique ID for anonymous crash reports and stats
-		If IniRead($settings_ini, "General", "unique_ID", "none") = "none" Or IniRead($settings_ini, "General", "unique_ID", "none") = "" Then
-			$anonymous_id = RegRead("HKEY_CURRENT_USER\SOFTWARE\LinuxLive\", "AnonymousID")
-			If $anonymous_id = "" Then
-				$anonymous_id = Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1))
-				RegWrite("HKEY_CURRENT_USER\SOFTWARE\LinuxLive\", "AnonymousID", "REG_SZ", $anonymous_id)
-				IniWrite($settings_ini, "General", "unique_ID", $anonymous_id)
-			Else
-
-				IniWrite($settings_ini, "General", "unique_ID", $anonymous_id)
+		$anonymous_id=RegRead("HKEY_CURRENT_USER\SOFTWARE\LinuxLive\General", "unique_ID")
+		if $anonymous_id = "" OR @error Then
+			$anonymous_id=IniRead($settings_ini, "General", "unique_ID","")
+			if $anonymous_id ="" Then
+				; Unique ID found in settings.ini
+				$anonymous_id = Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) _
+								& Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1))  _
+								& Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1)) & Chr(Random(Asc("A"), Asc("Z"), 1))
+				IniWrite($settings_ini,"General","unique_ID",$anonymous_id)
 			EndIf
+			if IniRead($settings_ini, "Advanced", "lili_portable_mode","")<>"yes" Then RegWrite("HKEY_CURRENT_USER\SOFTWARE\LinuxLive\General", "unique_ID","REG_SZ",$anonymous_id)
 		Else
-			$anonymous_id = IniRead($settings_ini, "General", "unique_ID", "none")
+			IniWrite($settings_ini,"General","unique_ID",$anonymous_id)
 		EndIf
+
 	EndIf
 Else
 	MsgBox(48, "ERROR", "Please put the 'tools' directory back")
 	Exit
 EndIf
 
-
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////// Includes     															  ///////////////////////////////////////////////////
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#include-once
 
 ; AutoIT native includes
 #include <GuiConstants.au3>
@@ -188,58 +195,73 @@ EndIf
 #include <ButtonConstants.au3>
 #include <StaticConstants.au3>
 #include <EditConstants.au3>
+#include <GUIConstantsEx.au3>
+#include <GUIListBox.au3>
+#include <GuiTreeView.au3>
+#include <StaticConstants.au3>
+#include <TabConstants.au3>
 #include <Array.au3>
 #include <String.au3>
 #include <File.au3>
 #include <INet.au3>
-#include <IE.au3>
 #include <WinHTTP.au3>
+#include <Crypt.au3>
 
 ; LiLi's components
 #include <Languages.au3>
-#include <About.au3>
 #include <Updates.au3>
-#include <Automatic_Bug_Report.au3>
-#include <Ressources.au3>
-#include <Graphics.au3>
-#include <MD5.au3>
+#include <Settings.au3>
 #include <Files.au3>
+#include <Logs_And_Status.au3>
+#include <Automatic_Bug_Report.au3>
+#include <Graphics.au3>
 #include <External_Tools.au3>
 #include <Disks.au3>
-#include <Logs_And_Status.au3>
 #include <Boot_Menus.au3>
 #include <Checking_And_Recognizing.au3>
 #include <Statistics.au3>
 #include <Releases.au3>
 #include <LiLis_heart.au3>
 #include <GUI_Actions.au3>
+#include <Options_Menu.au3>
+
+
+SplashImageOn("LiLi Splash Screen", @ScriptDir & "\tools\img\logo.jpg",344, 107, -1, -1, 1)
 
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////// Proxy settings                                                            ///////////////////////////////////////////////////
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ; Apply proxy settings
-If IniRead($settings_ini, "Proxy", "proxy_url", "none") <> "none" And IniRead($settings_ini, "Proxy", "proxy_url", "none") <> "" Then
-	$proxy_url = IniRead($settings_ini, "Proxy", "proxy_url", "none")
-	If IniRead($settings_ini, "Proxy", "proxy_port", "none") <> "none" And IniRead($settings_ini, "Proxy", "proxy_port", "none") <> "" Then $proxy_url &= ":" & IniRead($settings_ini, "Proxy", "proxy_port", "none")
-	If IniRead($settings_ini, "Proxy", "proxy_username", "none") <> "none" And IniRead($settings_ini, "Proxy", "proxy_username", "none") <> "" Then
-		$proxy_username = IniRead($settings_ini, "Proxy", "proxy_username", "none")
-		If IniRead($settings_ini, "Proxy", "proxy_password", "none") <> "none" And IniRead($settings_ini, "Proxy", "proxy_password", "none") <> "" Then
-			$proxy_password = IniRead($settings_ini, "Proxy", "proxy_password", "none")
-			HttpSetProxy(2, $proxy_url, $proxy_username, $proxy_password)
+$proxy_mode = ReadSetting( "Proxy", "proxy_mode")
+$proxy_url = ReadSetting( "Proxy", "proxy_url")
+$proxy_port = ReadSetting( "Proxy", "proxy_port")
+$proxy_username = ReadSetting( "Proxy", "proxy_username")
+$proxy_password = ReadSetting( "Proxy", "proxy_password")
+
+if $proxy_mode =2 Then
+	If $proxy_url <> "" AND  $proxy_port <> "" Then
+		$proxy_url &= ":" & $proxy_port
+		If $proxy_username <> "" Then
+			If $proxy_password <> "" Then
+				HttpSetProxy(2, $proxy_url, $proxy_username, $proxy_password)
+			Else
+				HttpSetProxy(2, $proxy_url, $proxy_username)
+			EndIf
 		Else
-			HttpSetProxy(2, $proxy_url, $proxy_username)
+			HttpSetProxy(2, $proxy_url)
 		EndIf
-	Else
-		HttpSetProxy(2, $proxy_url)
 	EndIf
+Else
+	HttpSetProxy($proxy_mode)
 EndIf
 
-; Initializing log file for verbose logging
-If IniRead($settings_ini, "General", "verbose_logging", "no") = "yes" Then InitLog()
-
-_SetAsReceiver("lili-main")
+_SetAsReceiverNoCallback("lili-main")
 _SetReceiverFunction("ReceiveFromSecondary")
+
+; Initializing log file for verbose logging
+$verbose_logging = ReadSetting( "General", "verbose_logging")
+If $verbose_logging = "yes" Then InitLog()
 
 SendReport("Starting LiLi USB Creator " & $software_version)
 
@@ -277,18 +299,18 @@ GUISetOnEvent($GUI_EVENT_CLOSE, "GUI_Events")
 GUISetOnEvent($GUI_EVENT_MINIMIZE, "GUI_Minimize")
 GUISetOnEvent($GUI_EVENT_RESTORE, "GUI_Restore")
 GUISetOnEvent($GUI_EVENT_MAXIMIZE, "GUI_Restore")
-HotKeySet("{UP}", "GUI_MoveUp")
-HotKeySet("{DOWN}", "GUI_MoveDown")
-HotKeySet("{LEFT}", "GUI_MoveLeft")
-HotKeySet("{RIGHT}", "GUI_MoveRight")
 
 GUIRegisterMsg($WM_LBUTTONDOWN, "moveGUI")
 
 SetBitmap($GUI, $PNG_GUI, 255)
 GUIRegisterMsg($WM_NCHITTEST, "WM_NCHITTEST")
-GUISetState(@SW_SHOW, $GUI)
 
-$CONTROL_GUI = GUICreate("LinuxLive USB Creator", 450, 750, 0,0, $WS_POPUP, BitOR($WS_EX_LAYERED, $WS_EX_MDICHILD), $GUI)
+$CONTROL_GUI = GUICreate("LinuxLive USB Creator", 450, 750, 5,7, $WS_POPUP, BitOR($WS_EX_LAYERED, $WS_EX_MDICHILD), $GUI)
+
+HotKeySet("{UP}", "GUI_MoveUp")
+HotKeySet("{DOWN}", "GUI_MoveDown")
+HotKeySet("{LEFT}", "GUI_MoveLeft")
+HotKeySet("{RIGHT}", "GUI_MoveRight")
 
 ; Offset applied on every items
 $offsetx0 = 27
@@ -334,16 +356,12 @@ GUICtrlSetOnEvent(-1, "GUI_Help_Step3")
 $HELP_STEP4_AREA = GUICtrlCreateLabel("", 335 + $offsetx0, 451 + $offsety0, 20, 20)
 GUICtrlSetCursor(-1, 0)
 GUICtrlSetOnEvent(-1, "GUI_Help_Step4")
-$HELP_STEP5_AREA = GUICtrlCreateLabel("", 335 + $offsetx0, 565 + $offsety0, 20, 20)
-GUICtrlSetCursor(-1, 0)
-GUICtrlSetOnEvent(-1, "GUI_Help_Step5")
+;$HELP_STEP5_AREA = GUICtrlCreateLabel("", 335 + $offsetx0, 565 + $offsety0, 20, 20)
+;GUICtrlSetCursor(-1, 0)
+;GUICtrlSetOnEvent(-1, "GUI_Help_Step5")
 
 GUISetBkColor(0x121314)
 _WinAPI_SetLayeredWindowAttributes($CONTROL_GUI, 0x121314)
-
-
-GUISetState(@SW_SHOW, $CONTROL_GUI)
-
 
 $ZEROGraphic = _GDIPlus_GraphicsCreateFromHWND($CONTROL_GUI)
 
@@ -359,7 +377,7 @@ $HELP_STEP1 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 
 $HELP_STEP2 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 201 + $offsety0, 20, 20)
 $HELP_STEP3 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 339 + $offsety0, 20, 20)
 $HELP_STEP4 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 451 + $offsety0, 20, 20)
-$HELP_STEP5 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 565 + $offsety0, 20, 20)
+;$HELP_STEP5 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 565 + $offsety0, 20, 20)
 
 ; Put the state for the first 3 steps
 Step1_Check("bad")
@@ -368,14 +386,16 @@ Step3_Check("bad")
 
 SendReport("Creating GUI (buttons)")
 
-; Text for step 2
+; Hovering Buttons
+AdlibRegister("Control_Hover", 150)
 
+; Text for step 2
 GUICtrlCreateLabel(Translate("STEP 2 : CHOOSE A SOURCE"), 28 + $offsetx0, 204 + $offsety0, 400, 30)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 GUICtrlSetFont(-1, 10, 400, 0, "Tahoma")
 
-$label_iso = GUICtrlCreateLabel("ISO / IMG / ZIP", 40 + $offsetx0, 302 + $offsety0, 80, 50)
+$label_iso = GUICtrlCreateLabel("ISO / IMG / ZIP", 40 + $offsetx0, 302 + $offsety0, 110, 50)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 
@@ -412,7 +432,7 @@ GUICtrlSetOnEvent(-1, "GUI_Persistence_Input")
 $slider_visual_Mo = GUICtrlCreateLabel(Translate("MB"), 135 + $offsetx3 + $offsetx0, 258 + $offsety3 + $offsety0, 20, 20)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
-$slider_visual_mode = GUICtrlCreateLabel(Translate("(Live mode only)"), 160 + $offsetx3 + $offsetx0, 258 + $offsety3 + $offsety0, 100, 20)
+$slider_visual_mode = GUICtrlCreateLabel(Translate("(Live mode only)"), 160 + $offsetx3 + $offsetx0, 258 + $offsety3 + $offsety0, 150, 20)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 
@@ -441,13 +461,6 @@ $hide_files_label = GUICtrlCreateLabel(Translate("Hide created files on key"), 5
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 
-; No more reason to keep that option because menu is integrated on right click of the key
-$except_wubi = GUICtrlCreateDummy()
-;$except_wubi = GUICtrlCreateCheckbox("", 200 + $offsetx4+$offsetx0, 285 + $offsety4+$offsety0, 13, 13)
-;$except_wubi_label = GUICtrlCreateLabel(Translate("(except for Umenu.exe)"), 220 + $offsetx4+$offsetx0, 285 + $offsety4+$offsety0, 200, 20)
-;GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
-;GUICtrlSetColor(-1, 0xFFFFFF)
-
 $formater = GUICtrlCreateCheckbox("", 30 + $offsetx4 + $offsetx0, 305 + $offsety4 + $offsety0, 13, 13)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
@@ -459,53 +472,61 @@ $virtualbox = GUICtrlCreateCheckbox("", 30 + $offsetx4 + $offsetx0, 325 + $offse
 GUICtrlSetState(-1, $GUI_CHECKED)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
+GUICtrlSetOnEvent(-1, "GUI_Check_VirtualBox")
 $virtualbox_label = GUICtrlCreateLabel(Translate("Enable launching LinuxLive in Windows (requires internet to install)"), 50 + $offsetx4 + $offsetx0, 325 + $offsety4 + $offsety0, 300, 30)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 
 
 ; Text and controls for step 5
-
-GUICtrlCreateLabel(Translate("STEP 5 : CREATE"), 28 + $offsetx0, 371 + $offsety4 + $offsety0, 400, 30)
+GUICtrlCreateLabel(Translate("STEP 5 : CREATE"), 28 + $offsetx0, 371 + $offsety4 + $offsety0, 250, 30)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 GUICtrlSetFont(-1, 10, 400, 0, "Tahoma")
+
+GUICtrlCreateButton(StringUpper(Translate("Options")), 220+28 + $offsetx0, 369 + $offsety4 + $offsety0, 100, 20)
+GUICtrlSetFont(-1, 10, 400, 0, "Tahoma")
+GUICtrlSetOnEvent(-1, "GUI_Help_Step5")
 
 $label_step5_status = GUICtrlCreateLabel("<- " & Translate("Click the lightning icon to start the installation"), 50 + $offsetx4 + $offsetx0, 410 + $offsety4 + $offsety0, 300, 60)
 GUICtrlSetFont($label_step5_status, 9, 800, 0, "Arial")
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 
-
 ; Filling the combo box with drive list
 
 $combo = GUICtrlCreateCombo("-> " & Translate("Choose a USB Key"), 90 + $offsetx0, 145 + $offsety0, 200, -1, 3)
-GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
-GUICtrlSetColor(-1, 0xFFFFFF)
 GUICtrlSetOnEvent(-1, "GUI_Choose_Drive")
 Refresh_DriveList()
-
 
 ; Sending anonymous statistics
 SendStats()
 SendReport(LogSystemConfig())
 
-; Starting to check for updates in the secondary LiLi's process
-SendReport("check_for_updates")
-
 $prefetched_linux_list = Print_For_ComboBox()
-
-; Hovering Buttons
-AdlibEnable("Control_Hover", 150)
 
 GUIRegisterMsg($WM_PAINT, "DrawAll")
 WinActivate($for_winactivate)
 GUISetState($GUI_SHOW, $CONTROL_GUI)
 
-Func MoveGUI($hW)
-	_SendMessage($GUI, $WM_SYSCOMMAND, 0xF012, 0)
-	ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
-EndFunc   ;==>MoveGUI
+; Starting to check for updates in the secondary LiLi's process
+SendReport("check_for_updates")
+
+SplashOff()
+Sleep(100)
+GUISetState(@SW_SHOW, $GUI)
+GUISetState(@SW_SHOW, $CONTROL_GUI)
+Sleep(100)
+; LiLi has been restarted due to a language change
+If ReadSetting("Internal","restart_language")="yes" Then
+	GUI_Options_Menu()
+EndIf
+
+; Netbook warning (interface too big). Warning will only appear once
+if @DesktopHeight<=600 AND ReadSetting("Advanced","skip_netbook_warning")<>"yes" Then
+	$return = MsgBox(64,Translate("Netbook screen detected"),Translate("Your screen vertical resolution is less than 600 pixels")&"."& @CRLF & Translate("Please use the arrow keys (up and down) of your keyboard to move the interface")&".")
+	WriteSetting("Advanced","skip_netbook_warning","yes")
+EndIf
 
 ; Main part
 While 1
@@ -514,9 +535,14 @@ While 1
 		GUICtrlSetData($combo, GUICtrlRead($combo))
 		$combo_updated = 1
 	EndIf
-	Sleep(5000)
-	DrawAll()
+	Sleep(100)
+	;DrawAll()
 WEnd
+
+Func MoveGUI($hW)
+	_SendMessage($GUI, $WM_SYSCOMMAND, 0xF012, 0)
+	ControlFocus("LinuxLive USB Creator", "", $REFRESH_AREA)
+EndFunc   ;==>MoveGUI
 
 Func DrawAll()
 	_WinAPI_RedrawWindow($CONTROL_GUI, 0, 0, $RDW_UPDATENOW)
@@ -536,7 +562,7 @@ Func DrawAll()
 	$HELP_STEP2 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 201 + $offsety0, 20, 20)
 	$HELP_STEP3 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 339 + $offsety0, 20, 20)
 	$HELP_STEP4 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 451 + $offsety0, 20, 20)
-	$HELP_STEP5 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 565 + $offsety0, 20, 20)
+	;$HELP_STEP5 = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $HELP, 0, 0, 20, 20, 335 + $offsetx0, 565 + $offsety0, 20, 20)
 	Redraw_Traffic_Lights()
 	_WinAPI_RedrawWindow($CONTROL_GUI, 0, 0, $RDW_VALIDATE) ; then force no-redraw of GUI
 	Return $GUI_RUNDEFMSG
@@ -575,9 +601,8 @@ Func Control_Hover()
 	Global $previous_hovered_control
 	Local $CursorCtrl
 	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
-
 		$CursorCtrl = GUIGetCursorInfo()
-		If Not @error Then
+		If Not @error And IsArray($CursorCtrl) Then
 			Switch $previous_hovered_control
 				Case $EXIT_AREA
 					If $CursorCtrl[2] = 1 Then GUI_Exit()
@@ -618,8 +643,10 @@ Func Control_Hover()
 			$previous_hovered_control = $CursorCtrl[4]
 		EndIf
 	EndIf
-	_Paint_Bars_Procedure2()
+	if IsArray($_Progress_Bars) Then _Paint_Bars_Procedure2()
+	_CALLBACKQUEUE()
 EndFunc   ;==>Control_Hover
+
 
 ; Received a message from the secondary lili's process
 Func ReceiveFromSecondary($message)
@@ -629,5 +656,8 @@ Func ReceiveFromSecondary($message)
 		; initialize list of compatible releases (load the compatibility_list.ini)
 		Get_Compatibility_List()
 		$prefetched_linux_list = Print_For_ComboBox()
+		UpdateLog("Compatibility list has been successfully updated")
+	Else
+		UpdateLog("Received message from secondary process ("&$message&")")
 	EndIf
 EndFunc
