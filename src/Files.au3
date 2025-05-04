@@ -113,14 +113,16 @@ Func FileCopyShell($fromFile, $tofile)
 	SendReport("End-_FileCopyShell")
 EndFunc   ;==>_FileCopy
 
-Func FileCopy2($arg1, $arg2)
+Func FileCopy2($arg1, $arg2 , $advanced=1)
 	Local $status="Copying File : " & $arg1 & " to " & $arg2
-	If FileCopy($arg1, $arg2,1) Then
+	If FileCopy($arg1, $arg2,$advanced) Then
 		$status &=" -> " &"Copied successfully"
 	Else
 		if FileExists($arg1) Then
-			$status &=" -> " & "Not copied"
+			$status &=" -> " & "Not copied (source file does not exist)"
 		Else
+			$status &=" -> " & "Not copied (error)"
+			UpdateLog($status)
 			Return 1
 		EndIf
 	EndIf
@@ -270,11 +272,13 @@ Func AutoDetectSyslinuxVersion($drive_letter)
 		$isolinux_bin = $drive_letter&"\isolinux\isolinux.bin"
 	ElseIf FileExists($drive_letter&"\boot\isolinux\isolinux.bin") Then
 		$isolinux_bin = $drive_letter&"\boot\isolinux\isolinux.bin"
+	ElseIf FileExists($drive_letter&"\slax\boot\isolinux.bin") Then
+		$isolinux_bin = $drive_letter&"\slax\boot\isolinux.bin"
 	ElseIf FileExists($drive_letter&"\isolinux.bin") Then
 		$isolinux_bin = $drive_letter&"\isolinux.bin"
 	Else
-		UpdateLog("Could not detect syslinux version (no isolinux.bin or syslinux.bin found)")
-		Return -1
+		UpdateLog("Could not detect syslinux version (no isolinux.bin or syslinux.bin found), default to v3")
+		Return 3
 	EndIf
 	Return DetectSyslinuxVersionInBin($isolinux_bin)
 EndFunc
@@ -302,8 +306,8 @@ Func DetectSyslinuxVersionInBin($file)
 		UpdateLog("Syslinux "&$major_revision&"."&$minor_revision&" detected in file "&$file)
 		Return $major_revision
 	Else
-		UpdateLog("Syslinux version could not be detected in file "&$file)
-		Return 0
+		UpdateLog("Syslinux version could not be detected in file "&$file& " => Falling back to the old method")
+		Return DetectSyslinuxVersionInBinold($file)
 	EndIf
 EndFunc
 
@@ -329,7 +333,7 @@ Func DetectSyslinuxVersionInBinold($file)
 		UpdateLog("Syslinux 1.X detected in file "&$file)
 		Return 2
 	Else
-		UpdateLog("Syslinux version could not be detected in file "&$file)
+		UpdateLog("[WARNING] Syslinux version could not be detected in file "&$file)
 		Return 0
 	EndIf
 EndFunc

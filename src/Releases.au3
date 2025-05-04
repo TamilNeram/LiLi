@@ -181,10 +181,15 @@ EndFunc
 Func FindReleaseFromCodeName($codename_to_find)
 	Global $releases
 	Local $found=-1
+	SendReport("FindReleaseFromCodeName : Tring to find "&$codename_to_find)
 	$sections = IniReadSectionNames($compatibility_ini)
 	For $i=1 to $sections[0]
 		If $sections[$i] = $codename_to_find Then $found = $i
 	Next
+	if $found=-1 Then
+		SendReport("FindReleaseFromCodeName : Warning, release codename not found, falling back to default")
+		return FindReleaseFromCodeName("default")
+	EndIf
 	Return $found
 EndFunc
 
@@ -230,6 +235,41 @@ Func ReleaseGetVariantVersion($release_in_list)
 	Return StringStripWS($releases[$release_in_list][$R_VARIANT_VERSION],3)
 EndFunc
 
+Func ReleaseGetWebsite($release_in_list)
+	if $release_in_list <=0 Then Return "NotFound"
+	Return StringStripWS($releases[$release_in_list][$R_WEB],3)
+EndFunc
+
+Func ReleaseGetDownloadPage($release_in_list)
+	if $release_in_list <=0 Then Return "NotFound"
+	Return StringStripWS($releases[$release_in_list][$R_DOWNLOAD_PAGE],3)
+EndFunc
+
+Func ReleaseGetMirror($release_in_list,$mirror_number=0)
+	if $release_in_list <=0 Then Return "NotFound"
+	if StringInStr($releases[$release_in_list][$R_MIRROR1],"::") Then
+		$split=StringSplit($releases[$release_in_list][$R_MIRROR1],"::",2)
+		if Ubound($split)==2 Then
+			Return IniRead(@ScriptDir&"\tools\settings\common_mirrors.ini",$split[0],"Mirrors","")
+		Else
+			Return ""
+		EndIf
+	Else
+		Return StringStripWS($releases[$release_in_list][$R_MIRROR1+$mirror_number],3)
+	EndIf
+EndFunc
+
+Func ReleaseGetMirrorStatus($release_in_list)
+	if $release_in_list <=0 Then Return 0
+	$available_mirrors=0
+	For $i=$R_MIRROR1 To $R_MIRROR10
+		if StringStripWS($releases[$release_in_list][$i],3) <> "" Then
+			$available_mirrors+=1
+		EndIf
+	Next
+	Return $available_mirrors
+EndFunc
+
 Func ReleaseGetInstallSize($release_in_list)
 	if $release_in_list <=0 Then Return 800
 	Return StringStripWS($releases[$release_in_list][$R_INSTALL_SIZE],3)
@@ -239,7 +279,7 @@ Func ReleaseGetDescription($release_in_list)
 	if $release_in_list <=0 Then Return "NotFound"
 	if StringInStr(ReleaseGetCodename($release_in_list),"separator")>0 Then
 		; This is a separator description
-		Return ">>>>>>>>>>>>>>> "&Translate(StringStripWS($releases[$release_in_list][$R_DESCRIPTION],3))&" <<<<<<<<<<<<<<<"
+		Return ">>>>>>>>>> "&Translate(StringStripWS($releases[$release_in_list][$R_DESCRIPTION],3))&" <<<<<<<<<<"
 	Else
 		; This is Linux description
 		Return Translate(StringStripWS($releases[$release_in_list][$R_DESCRIPTION],3))

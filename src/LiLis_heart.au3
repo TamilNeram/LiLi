@@ -427,7 +427,6 @@ Func Rename_and_move_files($drive_letter, $release_in_list)
 		if Not FileExists($drive_letter & "\boot\syslinux") AND Not FileExists($drive_letter & "\syslinux") then
 			DirMove($drive_letter & "\isolinux",$drive_letter & "\syslinux",1)
 			DirMove($drive_letter & "\boot\isolinux",$drive_letter & "\boot\syslinux",1)
-			DirMove($drive_letter & "\HBCD\isolinux",$drive_letter & "\HBCD\syslinux",1)
 		EndIf
 
 
@@ -513,13 +512,19 @@ Func Create_boot_menu($drive_letter,$release_in_list)
 	$variant = ReleaseGetVariant($release_in_list)
 	$distribution = ReleaseGetDistribution($release_in_list)
 	$features=ReleaseGetSupportedFeatures($release_in_list)
+	$variant_version=ReleaseGetVariantVersion($release_in_list)
 	if StringInStr($features,"default") = 0 Then
 		If $variant ="CentOS" Then
 			SendReport("IN-Create_boot_menu for CentOS")
 			CentOS_WriteTextCFG($drive_letter)
 		Elseif $distribution = "Fedora" Then
-			SendReport("IN-Create_boot_menu for Fedora")
-			Fedora_WriteTextCFG($drive_letter)
+			if $variant = "Mandriva" Then
+				SendReport("IN-Create_boot_menu for Mandriva")
+				Mandriva_WriteTextCFG($drive_letter)
+			Else
+				SendReport("IN-Create_boot_menu for Fedora")
+				Fedora_WriteTextCFG($drive_letter,$release_in_list)
+			EndIf
 		Elseif $variant = "TinyCore" Then
 			SendReport("IN-Create_boot_menu for TinyCore")
 			TinyCore_WriteTextCFG($drive_letter)
@@ -532,6 +537,9 @@ Func Create_boot_menu($drive_letter,$release_in_list)
 		Elseif $variant="XBMC" Then
 			SendReport("IN-Create_boot_menu for XBMC")
 			XBMC_WriteTextCFG($drive_letter,$release_in_list)
+		Elseif $variant = "backtrack" Then
+			SendReport("IN-Create_boot_menu for BackTrack")
+			BackTrack_WriteTextCFG($drive_letter,$release_in_list)
 		Elseif $distribution = "ubuntu" Then
 			SendReport("IN-Create_boot_menu for Ubuntu")
 			Ubuntu_WriteTextCFG($drive_letter,$release_in_list)
@@ -542,12 +550,24 @@ Func Create_boot_menu($drive_letter,$release_in_list)
 			SendReport("IN-Create_boot_menu for CrunchBang")
 			Crunchbang_WriteTextCFG($drive_letter,$release_in_list)
 		EndIf
+	Elseif $variant="CDLinux" Then
+		SendReport("IN-Create_boot_menu for CDLinux")
+		CDLinux_WriteTextCFG($drive_letter,$release_in_list)
 	Elseif $variant = "opensuse" Then
-			SendReport("IN-Create_boot_menu for OpenSuse : Setting MBR ID")
-			Set_OpenSuse_MBR_ID($drive_letter)
+		If $variant_version = "11.3" Then
+			SendReport("IN-Create_boot_menu for OpenSuse : Setting MBR ID (without trailing zeroes)")
+			Set_OpenSuse_MBR_ID($drive_letter,1)
+		Else
+			SendReport("IN-Create_boot_menu for OpenSuse : Setting MBR ID (with trailing zeroes)")
+			Set_OpenSuse_MBR_ID($drive_letter,0)
+		EndIf
+	ElseIf StringInStr($features,"opensuse-mbrid-trailing")>0 then
+			SendReport("IN-Create_boot_menu for OpenSuse variant: Setting MBR ID (with trailing zeroes)")
+			Set_OpenSuse_MBR_ID($drive_letter,0)
 	ElseIf StringInStr($features,"opensuse-mbrid")>0 then
-			SendReport("IN-Create_boot_menu for OpenSuse variant: Setting MBR ID")
-			Set_OpenSuse_MBR_ID($drive_letter)
+			SendReport("IN-Create_boot_menu for OpenSuse variant: Setting MBR ID (without trailing zeroes)")
+			Set_OpenSuse_MBR_ID($drive_letter,1)
+
 	Else
 		SendReport("IN-Create_boot_menu for Regular Linux")
 		Default_WriteTextCFG($drive_letter)
@@ -685,6 +705,10 @@ Func Create_persistence_file($drive_letter,$release_in_list,$persistence_size,$h
 			; Ubuntu
 			$persistence_file= 'casper-rw'
 			UpdateLog("Found feature ubuntu-persistence, persistence file will be "&$persistence_file)
+		Elseif StringInStr($features,"backtrack-persistence")<>0 Then
+			; BackTrack > v5
+			$persistence_file= 'casper-rw'
+			UpdateLog("Found feature backtrack-persistence, persistence file will be "&$persistence_file)
 		Elseif StringInStr($features,"sidux-persistence")<>0 Then
 			; Sidux
 			$persistence_file= "sidux\sidux-rw"
@@ -729,7 +753,7 @@ Func Create_persistence_file($drive_letter,$release_in_list,$persistence_size,$h
 		if ($persistence_size >= 1000) Then $time_to_format=6
 		if ($persistence_size >= 2000) Then $time_to_format=10
 		if ($persistence_size >= 3000) Then $time_to_format=15
-		UpdateStatus(Translate("Formating persistence file") & " ( ±"& $time_to_format & " " & Translate("min") & " )")
+		UpdateStatus(Translate("Formating persistence file") & " ( ~"& $time_to_format & " " & Translate("min") & " )")
 		EXT2_Format_File($drive_letter&"\"&$persistence_file)
 	Else
 		UpdateStatus("Live mode : no persistence file")
@@ -752,7 +776,7 @@ EndFunc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Func isSyslinuxCfgPresent($drive_letter)
 	SendReport("Start-isSyslinuxCfgPresent")
-	$config_found = (FileExists($drive_letter&"\boot\syslinux\syslinux.cfg") OR FileExists($drive_letter&"\syslinux\syslinux.cfg") OR FileExists($drive_letter&"\syslinux.cfg"))
+	$config_found = (FileExists($drive_letter&"\boot\syslinux\syslinux.cfg") OR FileExists($drive_letter&"\syslinux\syslinux.cfg") OR FileExists($drive_letter&"\syslinux.cfg") OR FileExists($drive_letter & "\HBCD\syslinux.cfg") OR FileExists($drive_letter & "\slax\boot\syslinux.cfg"))
 	SendReport("End-isSyslinuxCfgPresent : Found = "&$config_found)
 	Return $config_found
 EndFunc
@@ -778,7 +802,19 @@ Func Install_boot_sectors($drive_letter,$release_in_list,$hide_it)
 	SendReport("Start-Install_boot_sectors")
 	UpdateStatus("Installing boot sectors")
 	$features=ReleaseGetSupportedFeatures($release_in_list)
-	if StringInStr($features,"grub") > 0 OR NOT isSyslinuxCfgPresent($drive_letter) Then
+
+	if StringInStr($features,"windows-bootsect") > 0 Then
+		; Windows mode
+		If FileExists($drive_letter & "\boot\bootsect.exe") Then
+			SendReport("IN-Install_boot_sectors : Found bootsect.exe, installing windows boot sectors")
+			InstallWindowsBootSectors($drive_letter)
+			SendReport("End-Install_boot_sectors")
+			return 0
+		Else
+			SendReport("IN-Install_boot_sectors : ERROR, bootsect.exe not found to satisfy windows-bootsect mode")
+		EndIf
+	Elseif StringInStr($features,"grub") > 0 OR NOT isSyslinuxCfgPresent($drive_letter) Then
+		; GRUB Mode
 		UpdateLog("Variant is using GRUB loader")
 
 		; Syslinux will chainload GRUB loader
@@ -787,26 +823,114 @@ Func Install_boot_sectors($drive_letter,$release_in_list,$hide_it)
 		FileCopy2(@ScriptDir & '\tools\boot-menus\grub-syslinux.cfg',$drive_letter & "\syslinux\syslinux.cfg")
 
 		if NOT (FileExists($drive_letter&"\menu.lst") OR FileExists($drive_letter&"\boot\menu.lst") OR FileExists($drive_letter&"\boot\grub\menu.lst")) Then
-			SendReport("--------------> ERROR : syslinux.cfg and menu.lst not found !")
+			SendReport("IN-Install_boot_sectors :  ERROR, syslinux.cfg and menu.lst not found ")
 		EndIf
+	EndIf
+
+	If FileExists($drive_letter & "\HBCD\syslinux.cfg") Then
+		SendReport("IN-Install_boot_sectors :  Hiren's boot CD detected, using syslinux folder HBCD\ ")
+		$syslinux_menu_folder = "/HBCD"
+	Else
+		$syslinux_menu_folder = 0
+	EndIf
+
+	If FileExists($drive_letter & "\slax\boot\syslinux.cfg") Then
+		SendReport("IN-Install_boot_sectors :  Slax > 7 detected, using syslinux folder slax\boot\ ")
+		$syslinux_menu_folder = "/slax/boot"
+	Else
+		$syslinux_menu_folder = 0
 	EndIf
 
 	$syslinux_version = AutoDetectSyslinuxVersion($drive_letter)
 
-	; AutoDetection for syslinux 3/4
-	if $syslinux_version >= 3 Then
-		InstallSyslinux($drive_letter,$syslinux_version)
+	; Selecting syslinux version
+	if StringInStr($features,"syslinux4") > 0 Then
+		SendReport("IN-Install_boot_sectors :  Syslinux version forced to v4 (found = v"&$syslinux_version&")")
+		$syslinux_version = 4
+	Elseif StringInStr($features,"syslinux3") > 0 Then
+		SendReport("IN-Install_boot_sectors :  Syslinux version forced to v3 (found = v"&$syslinux_version&")")
+		$syslinux_version = 3
 	Else
-		; Installing the syslinux boot sectors using Syslinux 4 if feature is set.
-		if StringInStr($features,"syslinux4") > 0 Then
-			InstallSyslinux($drive_letter,4)
-		Else
-			InstallSyslinux($drive_letter,3)
-		EndIf
+		SendReport("IN-Install_boot_sectors :  Using syslinux version "&$syslinux_version)
 	EndIf
 
-	;RunWait3('"' & @ScriptDir & '\tools\syslinux.exe" -maf -d ' & $drive_letter & '\syslinux ' & $drive_letter, @ScriptDir, @SW_HIDE)
+	; Syslinux 3.X or superior
+	if $syslinux_version >= 3 Then
+		InstallSyslinux($drive_letter,$syslinux_version,$syslinux_menu_folder)
+	Else
+		InstallSyslinux($drive_letter,3,$syslinux_menu_folder)
+	EndIf
 
+
+
+	if FileExists($drive_letter & "\boot\syslinux\syslinux.cfg") Then
+		$syslinux_folder=$drive_letter & "\boot\syslinux\"
+	Elseif FileExists($drive_letter & "\syslinux\syslinux.cfg") Then
+		$syslinux_folder=$drive_letter & "\syslinux\"
+	Elseif FileExists($drive_letter & "\syslinux.cfg") Then
+		$syslinux_folder=$drive_letter & "\"
+	Else
+		SendReport("IN-Install_boot_sectors :  syslinux.cfg disappeared ?!!, trying with folder = "&$drive_letter & "\syslinux\")
+		$syslinux_folder=$drive_letter & "\syslinux\"
+	EndIf
+
+	$modules_to_keep=""
+	$modules_to_copy=""
+	$features_array=StringSplit($features,",",2)
+	FOR $feature IN $features_array
+		if StringInStr($feature,"keep-module:")<>0 Then
+			$modules_to_keep&=StringReplace($feature,"keep-module:","")&"|"
+		Elseif StringInStr($feature,"copy-module:")<>0 Then
+			$modules_to_copy&=StringReplace($feature,"copy-module:","")&"|"
+		EndIf
+	Next
+	If StringRight($modules_to_keep,1) == "|" Then $modules_to_keep=StringTrimRight($modules_to_keep,1)
+	If StringRight($modules_to_copy,1) == "|" Then $modules_to_copy=StringTrimRight($modules_to_copy,1)
+
+	SendReport("IN-Install_boot_sectors :  modules to keep='"&$modules_to_keep&"' and modules to copy='"&$modules_to_copy&"'")
+
+	If $modules_to_copy <> "" Then
+		$modules_to_copy_array=StringSplit($modules_to_copy,"|",3)
+		FOR $modulename_to_copy IN $modules_to_copy_array
+			FileCopy2(@ScriptDir&"\tools\syslinux-modules\v"&$syslinux_version&"\"&$modulename_to_copy,$syslinux_folder,9)
+		Next
+	EndIf
+
+	; Replacing Syslinux modules by the good ones
+	$search = FileFindFirstFile($syslinux_folder&"*.c32")
+	; Check if the search was successful
+	If $search <> -1 Then
+		$found_modules=""
+		While 1
+			$file = FileFindNextFile($search)
+			If @error Then ExitLoop
+			$found_modules&=$file&"|"
+		WEnd
+
+		$found_modules=StringSplit(StringTrimRight($found_modules,1),"|",2)
+		If Ubound($found_modules) > 0 Then
+			For $module IN $found_modules
+				if $module = "gfxboot.c32" Then
+					SendReport("IN-Install_boot_sectors : Skip replacement of module "&$module&" to keep Ubuntu variants working")
+				Elseif StringInStr($module,$modules_to_keep) Then
+					SendReport("IN-Install_boot_sectors : Skip replacement of module "&$module&" because of parameter keep-module")
+				Else
+					$new_module=@ScriptDir&"\tools\syslinux-modules\v"&$syslinux_version&"\"&$module
+					If FileExists($new_module) Then
+						SendReport("IN-Install_boot_sectors : Replacing syslinux "&$syslinux_version&" module "&$module&" by the matching one")
+						FileCopy2($new_module,$syslinux_folder)
+					Else
+						SendReport("IN-Install_boot_sectors : WARNING, Could not replace syslinux "&$syslinux_version&" module "&$module&" by the matching one")
+					EndIf
+				EndIf
+			Next
+		Else
+			SendReport("IN-Install_boot_sectors : No syslinux module to replace")
+		Endif
+	EndIf
+	FileClose($search)
+
+	;RunWait3('"' & @ScriptDir & '\tools\syslinux.exe" -maf -d ' & $drive_letter & '\syslinux ' & $drive_letter, @ScriptDir, @SW_HIDE)
 	If ( $hide_it <> $GUI_CHECKED) Then ShowFile($drive_letter & '\ldlinux.sys')
 	SendReport("End-Install_boot_sectors")
 EndFunc
@@ -1027,6 +1151,7 @@ Func CreateUninstaller($drive_letter,$release_in_list)
 	AddToSmartClean($drive_letter,"ldlinux.sys")
 	AddToSmartClean($drive_letter,"syslinux")
 	AddToSmartClean($drive_letter,"syslinux.cfg")
+	AddToSmartClean($drive_letter,"syslinux.cfg.lili-bak")
 
 	if ReleaseGetVariant($release_in_list)="pmagic" Then
 		AddToSmartClean($drive_letter,"pmagic")
@@ -1177,7 +1302,6 @@ EndFunc
 
 Func Final_check()
 	SendReport("Start-Final_check")
-	Global $recommended_ram
 	Local $avert_mem = ""
 	$mem = MemGetStats()
 

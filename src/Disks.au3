@@ -50,7 +50,6 @@ EndFunc   ;==>Refresh_DriveList
 
 Func SpaceAfterLinuxLiveMB($disk)
 	SendReport("Start-SpaceAfterLinuxLiveMB (Disk: " & $disk & " )")
-	Local $install_size
 
 	#cs
 	If ReleaseGetCodename($release_number) = "default" Then
@@ -61,36 +60,44 @@ Func SpaceAfterLinuxLiveMB($disk)
 	#ce
 	if get_extension($file_set)="iso" Then
 		$install_size = Round(FileGetSize($file_set) / 1048576)+10
+		SendReport("Install size from FileGetSize")
 	Else
 		$install_size = ReleaseGetInstallSize($release_number)
+		SendReport("Install size from ReleaseGetSize")
 	EndIf
 
+	SendReport("Install size = "&$install_size&" - vbox size = "&$virtualbox_default_realsize)
 
 	If GUICtrlRead($virtualbox) == $GUI_CHECKED Then
 		; Need some MB for VirtualBox
-		$install_size = $install_size + $virtualbox_realsize
+		$install_size = $install_size + $virtualbox_default_realsize
 	EndIf
+
+	SendReport("Install size (with vbox added)= "&$install_size)
+
 
 	If GUICtrlRead($formater) == $GUI_CHECKED Then
 		$spacefree = DriveSpaceTotal($disk) - $install_size
 		If $spacefree >= 0 And $spacefree <= $max_persistent_size Then
-			Return Round($spacefree / 100, 0) * 100
+			SendReport("Space free = "&$spacefree&" - rounded spacefree = "&Round($spacefree / 10, 0) * 10)
+			Return Round($spacefree / 10, 0) * 10
 		ElseIf $spacefree >= 0 And $spacefree > $max_persistent_size Then
-			SendReport("End-SpaceAfterLinuxLiveGB (Free : "&$max_persistent_size&"MB )")
+			SendReport("End-SpaceAfterLinuxLiveMB (Free : "&$max_persistent_size&"MB )")
 			Return $max_persistent_size
 		Else
-			SendReport("End-SpaceAfterLinuxLiveGB (Free : 0MB )")
+			SendReport("End-SpaceAfterLinuxLiveMB (Free : 0MB )")
 			Return 0
 		EndIf
 	Else
 		$previous_installsize=GetPreviousInstallSizeMB($disk)
 		$spacefree = DriveSpaceFree($disk) + $previous_installsize - $install_size
+		SendReport("Space free = "&$spacefree&" (drivespacefree = "&DriveSpaceFree($disk)& " + $previous_installsize = "&$previous_installsize&" ---- $install_size ="&$install_size )
 		If $spacefree >= 0 And $spacefree <= $max_persistent_size Then
-			$rounded=Round($spacefree / 100, 0) * 100
-			SendReport("End-SpaceAfterLinuxLiveGB (Free : "&$rounded&"MB - Previous install : "&$previous_installsize&"MB)")
+			$rounded=Round($spacefree / 10, 0) * 10
+			SendReport("End-SpaceAfterLinuxLiveMB (Free : "&$rounded&"MB - Previous install : "&$previous_installsize&"MB)")
 			Return $rounded
 		ElseIf $spacefree >= 0 And $spacefree > $max_persistent_size Then
-			SendReport("End-SpaceAfterLinuxLiveGB (Free : "&$max_persistent_size&"MB )")
+			SendReport("End-SpaceAfterLinuxLiveMB (Free : "&$max_persistent_size&"MB )")
 			Return $max_persistent_size
 		Else
 			SendReport("End-SpaceAfterLinuxLiveMB (Free : 0MB )")
@@ -156,7 +163,7 @@ Func GiveMePhysicalDisk($drive_letter)
 EndFunc   ;==>GiveMePhysicalDisk
 
 
-Func Get_MBR_ID($drive_letter)
+Func Get_MBR_ID($drive_letter,$clean_trailing_zeroes=1)
 	Local $physical_drive,$g_eventerror
 
 	UpdateLog("Get_MBR_identifier of : "&$drive_letter)
@@ -200,15 +207,16 @@ Func Get_MBR_ID($drive_letter)
 	endif
 
 	if $found=1 Then
-		UpdateLog("MBR identifier of "&$drive_letter&" is : "& $mbr_signature&" (0x"&$mbr_signature&")")
+
 		$mbr_hex = 	StringLower(Hex($mbr_signature))
 		;Signature can be 0 when formatted using a Macintosh
-		if $mbr_signature <> "0" Then
+		if $mbr_signature <> "0" AND $clean_trailing_zeroes = 1 Then
 			; Trimming left trailing zeroes
 			While StringLeft($mbr_hex,1)="0"
 				$mbr_hex=StringTrimLeft($mbr_hex,1)
 			WEnd
 		EndIf
+		UpdateLog("MBR identifier of "&$drive_letter&" is : "& $mbr_signature&" ("&$mbr_hex&")")
 		Return $mbr_hex
 	Else
 		UpdateLog("MBR identifier could not be found : no match in WMI")
@@ -219,7 +227,7 @@ EndFunc
 
 Func Get_Disk_UUID($drive_letter)
 	SendReport("Start-Get_Disk_UUID ( Drive : " & $drive_letter & " )")
-	Local $uuid = "EEEE-EEEE"
+	Local $uuid = "EEEEEEEE"
 	Local $g_eventerror
 	Local $wbemFlagReturnImmediately, $wbemFlagForwardOnly, $objWMIService, $colItems, $objItem
 	$wbemFlagReturnImmediately = 0x10
@@ -241,6 +249,9 @@ Func Get_Disk_UUID($drive_letter)
 		For $o_ObjProcess In $o_ColListOfProcesses
 			$uuid = $o_ObjProcess.VolumeSerialNumber
 		Next
+		If $uuid = "EEEEEEEE" Then
+			SendReport("IN-Get_Disk_UUID : ERROR : UUID was not found (EEEE-EEEE)")
+		EndIf
 		$result=StringTrimRight($uuid, 4) & "-" & StringTrimLeft($uuid, 4)
 		SendReport("End-Get_Disk_UUID : UUID is "&$result)
 		Return $result

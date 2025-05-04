@@ -1,17 +1,23 @@
 #NoTrayIcon
 #RequireAdmin
+
+; Required for the Automatic Bug Reporting process
+#pragma compile(AutoItExecuteAllowed, True)
+
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
-#AutoIt3Wrapper_Icon=tools\img\lili.ico
+#AutoIt3Wrapper_icon=tools\img\lili.ico
 #AutoIt3Wrapper_Compression=0
 #AutoIt3Wrapper_UseUpx=n
 #AutoIt3Wrapper_Res_Comment=Enjoy !
 #AutoIt3Wrapper_Res_Description=Easily create a Linux Live USB
-#AutoIt3Wrapper_Res_Fileversion=2.7.88.46
-#AutoIt3Wrapper_Res_FileVersion_AutoIncrement=Y
+#AutoIt3Wrapper_Res_Fileversion=2.8.88.53
+#AutoIt3Wrapper_Res_Fileversion_AutoIncrement=Y
 #AutoIt3Wrapper_Res_LegalCopyright=CopyLeft Thibaut Lauziere a.k.a Slÿm
 #AutoIt3Wrapper_Res_SaveSource=y
+#AutoIt3Wrapper_Res_Field=AutoIt Version|%AutoItVer%
+#AutoIt3Wrapper_Res_Field=Compile Date|%date% %time%
 #AutoIt3Wrapper_Res_Field=Site|http://www.linuxliveusb.com
-#AutoIt3Wrapper_Au3Check_Parameters=-w 4
+#AutoIt3Wrapper_AU3Check_Parameters=-w 4
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -24,14 +30,14 @@
 ; License          : GPL v3.0
 ; Download         : http://www.linuxliveusb.com
 ; Support          : http://www.linuxliveusb.com/bugs/
-; Compiled with    : AutoIT v3.3.6.1
+; Compiled with    : AutoIT v3.3.8.1
 
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////// Software constants and variables              ///////////////////////////////////////////////////////////////////////////////
 ; ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ; Global constants
-Global Const $software_version = "2.7"
+Global Const $software_version = "2.8"
 Global $lang_folder = @ScriptDir & "\tools\languages\"
 Global $lang_ini
 Global $verbose_logging
@@ -62,6 +68,7 @@ Global $last_stable, $last_stable_update, $last_beta, $last_beta_update, $what_i
 ; General GUI
 Global $GUI, $CONTROL_GUI, $EXIT_BUTTON, $MIN_BUTTON
 Global $combo
+Global $previous_hovered_control
 
 ; Step 1 Graphics
 Global $DRAW_CHECK_STEP1, $DRAW_REFRESH, $HELP_STEP1
@@ -123,8 +130,9 @@ Global $for_winactivate
 Global $current_download, $temp_filename
 Global $ping_result = ""
 
-Global $selected_drive, $virtualbox_check, $virtualbox_size, $virtualbox_realsize, $downloaded_virtualbox_filename
+Global $selected_drive, $virtualbox_check, $virtualbox_size, $virtualbox_realsize, $downloaded_virtualbox_filename,$recommended_ram
 Global $persistence_file = ""
+Global $initrd_file, $vmlinuz_file
 Global $STEP1_OK, $STEP2_OK, $STEP3_OK
 Global $MD5_ISO, $version_in_file
 Global $variante
@@ -362,10 +370,6 @@ GUIRegisterMsg($WM_NCHITTEST, "WM_NCHITTEST")
 
 $CONTROL_GUI = GUICreate("LinuxLive USB Creator", 450, 750, 5, 7, $WS_POPUP, BitOR($WS_EX_LAYERED, $WS_EX_MDICHILD), $GUI)
 GUISetFont($font_size)
-HotKeySet("{UP}", "GUI_MoveUp")
-HotKeySet("{DOWN}", "GUI_MoveDown")
-HotKeySet("{LEFT}", "GUI_MoveLeft")
-HotKeySet("{RIGHT}", "GUI_MoveRight")
 
 ; Offset applied on every items
 $offsetx0 = 27
@@ -420,11 +424,13 @@ GUICtrlSetOnEvent(-1, "GUI_Help_Step4")
 ;GUICtrlSetOnEvent(-1, "GUI_Help_Step5")
 
 GUISetBkColor(0x121314)
+
 _WinAPI_SetLayeredWindowAttributes($CONTROL_GUI, 0x121314)
 
 $ZEROGraphic = _GDIPlus_GraphicsCreateFromHWND($CONTROL_GUI)
 
 ; Firt display (initialization) of images
+$PNG_DISPLAY = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $PNG_GUI, 0, 0, 450, 750, 0, 0, 450, 750)
 $EXIT_BUTTON = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $EXIT_NORM, 0, 0, 20, 20, 335 + $offsetx0, -20 + $offsety0, 20, 20)
 $MIN_BUTTON = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $MIN_NORM, 0, 0, 20, 20, 305 + $offsetx0, -20 + $offsety0, 20, 20)
 $DRAW_REFRESH = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $REFRESH_PNG, 0, 0, 20, 20, 300 + $offsetx0, 145 + $offsety0, 20, 20)
@@ -516,6 +522,9 @@ $hide_files = GUICtrlCreateCheckbox("", 30 + $offsetx4 + $offsetx0, 285 + $offse
 GUICtrlSetState(-1, $GUI_CHECKED)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
+SetLastStateHideFiles()
+GUICtrlSetOnEvent(-1, "GUI_Check_HideFiles")
+
 $hide_files_label = GUICtrlCreateLabel(Translate("Hide created files on key"), 50 + $offsetx4 + $offsetx0, 285 + $offsety4 + $offsety0, 300, 20)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
@@ -524,14 +533,18 @@ $formater = GUICtrlCreateCheckbox("", 30 + $offsetx4 + $offsetx0, 305 + $offsety
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 GUICtrlSetOnEvent(-1, "GUI_Format_Key")
+
 $formater_label = GUICtrlCreateLabel(Translate("Format the key in FAT32 (this will erase your data !!)"), 50 + $offsetx4 + $offsetx0, 305 + $offsety4 + $offsety0, 320, 20)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
+
 $virtualbox = GUICtrlCreateCheckbox("", 30 + $offsetx4 + $offsetx0, 325 + $offsety4 + $offsety0, 13, 13)
-GUICtrlSetState(-1, $GUI_CHECKED)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
 GUICtrlSetOnEvent(-1, "GUI_Check_VirtualBox")
+; Setting back last state
+SetLastStateVirtualization()
+
 $virtualbox_label = GUICtrlCreateLabel(Translate("Enable launching LinuxLive in Windows (requires internet to install)"), 50 + $offsetx4 + $offsetx0, 325 + $offsety4 + $offsety0, 300, 50)
 GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 GUICtrlSetColor(-1, 0xFFFFFF)
@@ -577,6 +590,7 @@ GUIDelete($splash_gui)
 Sleep(100)
 GUISetState(@SW_SHOW, $GUI)
 GUISetState(@SW_SHOW, $CONTROL_GUI)
+
 Sleep(100)
 ; LiLi has been restarted due to a language change
 If ReadSetting("Internal", "restart_language") = "yes" Then
@@ -584,9 +598,15 @@ If ReadSetting("Internal", "restart_language") = "yes" Then
 EndIf
 
 ; Netbook warning (interface too big). Warning will only appear once
-If @DesktopHeight <= 600 And ReadSetting("Advanced", "skip_netbook_warning") <> "yes" Then
-	$return = MsgBox(64, Translate("Netbook screen detected"), Translate("Your screen vertical resolution is less than 600 pixels") & "." & @CRLF & Translate("Please use the arrow keys (up and down) of your keyboard to move the interface") & ".")
-	WriteSetting("Advanced", "skip_netbook_warning", "yes")
+If @DesktopHeight <= 600 Then
+	HotKeySet("{UP}", "GUI_MoveUp")
+	HotKeySet("{DOWN}", "GUI_MoveDown")
+	HotKeySet("{LEFT}", "GUI_MoveLeft")
+	HotKeySet("{RIGHT}", "GUI_MoveRight")
+	if ReadSetting("Advanced", "skip_netbook_warning") <> "yes" Then
+		$return = MsgBox(64, Translate("Netbook screen detected"), Translate("Your screen vertical resolution is less than 600 pixels") & "." & @CRLF & Translate("Please use the arrow keys (up and down) of your keyboard to move the interface") & ".")
+		WriteSetting("Advanced", "skip_netbook_warning", "yes")
+	EndIf
 EndIf
 
 ; Main part
@@ -607,6 +627,7 @@ EndFunc   ;==>MoveGUI
 
 Func DrawAll()
 	_WinAPI_RedrawWindow($CONTROL_GUI, 0, 0, $RDW_UPDATENOW)
+
 	$EXIT_BUTTON = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $EXIT_NORM, 0, 0, 20, 20, 335 + $offsetx0, -20 + $offsety0, 20, 20)
 	$MIN_BUTTON = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $MIN_NORM, 0, 0, 20, 20, 305 + $offsetx0, -20 + $offsety0, 20, 20)
 	$DRAW_REFRESH = _GDIPlus_GraphicsDrawImageRectRect($ZEROGraphic, $REFRESH_PNG, 0, 0, 20, 20, 300 + $offsetx0, 145 + $offsety0, 20, 20)
@@ -659,7 +680,6 @@ EndFunc   ;==>Redraw_Traffic_Lights
 
 
 Func Control_Hover()
-	Global $previous_hovered_control
 	Local $CursorCtrl
 	If WinActive("LinuxLive USB Creator") Or WinActive("LiLi USB Creator") Then
 		$CursorCtrl = GUIGetCursorInfo()
@@ -702,7 +722,9 @@ Func Control_Hover()
 			$previous_hovered_control = $CursorCtrl[4]
 		EndIf
 	EndIf
-	If IsArray($_Progress_Bars) Then _Paint_Bars_Procedure2()
+	If IsArray($_Progress_Bars) Then
+		_Paint_Bars_Procedure2()
+	EndIf
 	_CALLBACKQUEUE()
 EndFunc   ;==>Control_Hover
 

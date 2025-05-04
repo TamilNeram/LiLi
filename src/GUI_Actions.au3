@@ -25,24 +25,41 @@ Func Enable_Persistent_Mode()
 EndFunc   ;==>Enable_Persistent_Mode
 
 Func Disable_VirtualBox_Option()
-	GUICtrlSetState($virtualbox, $GUI_UNCHECKED)
+	SetLastStateVirtualization()
 	GUICtrlSetState($virtualbox, $GUI_DISABLE)
 EndFunc   ;==>Disable_VirtualBox_Option
 
 Func Enable_VirtualBox_Option()
-	GUICtrlSetState($virtualbox, $GUI_CHECKED)
+	SetLastStateVirtualization()
 	GUICtrlSetState($virtualbox, $GUI_ENABLE)
 EndFunc   ;==>Enable_VirtualBox_Option
 
 Func Disable_Hide_Option()
-	GUICtrlSetState($hide_files, $GUI_UNCHECKED)
+	SetLastStateHideFiles()
 	GUICtrlSetState($hide_files, $GUI_DISABLE)
 EndFunc   ;==>Disable_Hide_Option
 
 Func Enable_Hide_Option()
-	GUICtrlSetState($hide_files, $GUI_CHECKED)
+	SetLastStateHideFiles()
 	GUICtrlSetState($hide_files, $GUI_ENABLE)
 EndFunc   ;==>Enable_Hide_Option
+
+Func SetLastStateHideFiles()
+	if ReadSetting("Last_State","hide_files")="yes" Then
+		GUICtrlSetState($hide_files, $GUI_CHECKED)
+	Else
+		GUICtrlSetState($hide_files, $GUI_UNCHECKED)
+	EndIf
+EndFunc
+
+Func SetLastStateVirtualization()
+	if ReadSetting("Last_State","virtualization")="yes" Then
+		GUICtrlSetState($virtualbox, $GUI_CHECKED)
+	Else
+		GUICtrlSetState($virtualbox, $GUI_UNCHECKED)
+	EndIf
+EndFunc
+
 
 ; Clickable parts of images
 Func GUI_Exit()
@@ -386,11 +403,11 @@ Func GUI_Back_Download()
 	Global $label_step2_status,$label_step2_status2
 	Global $current_download,$progress_bar
 	InetClose($current_download)
-	if $progress_bar Then _ProgressDelete($progress_bar)
 	GUI_Hide_Step2_Download_Menu()
 	GUI_Hide_Back_Button()
 	GUICtrlSetState($label_step2_status,$GUI_HIDE)
 	GUICtrlSetState($label_step2_status2,$GUI_HIDE)
+	_ProgressDelete($progress_bar)
 	; Showing old elements again
 	GUI_Show_Step2_Default_Menu()
 	SendReport("End-GUI_Back_Download")
@@ -399,9 +416,16 @@ EndFunc   ;==>GUI_Back_Download
 Func GUI_Select_Linux()
 	SendReport("Start-GUI_Select_Linux")
 	$selected_linux = GUICtrlRead($combo_linux)
+
 	If StringInStr($selected_linux, ">>") = 0 Then
-		GUICtrlSetState($download_manual, $GUI_ENABLE)
-		GUICtrlSetState($download_auto, $GUI_ENABLE)
+		$release_in_list = FindReleaseFromDescription($selected_linux)
+		if ReleaseGetMirrorStatus($release_in_list)> 0 Then
+			GUICtrlSetState($download_manual, $GUI_ENABLE)
+			GUICtrlSetState($download_auto, $GUI_ENABLE)
+		Else
+			GUICtrlSetState($download_manual, $GUI_ENABLE)
+			GUICtrlSetState($download_auto, $GUI_DISABLE)
+		EndIf
 	Else
 		MsgBox(48, Translate("Please read"), Translate("Please select a linux to continue"))
 		GUICtrlSetState($download_manual, $GUI_DISABLE)
@@ -422,7 +446,11 @@ Func GUI_Download_Manually()
 	$selected_linux = GUICtrlRead($combo_linux)
 	SendReport("Start-GUI_Download_Manually (Downloading "&$selected_linux&" )")
 	$release_in_list = FindReleaseFromDescription($selected_linux)
-	DownloadRelease($release_in_list, 0)
+	if ReleaseGetMirrorStatus($release_in_list)> 0 Then
+		DownloadRelease($release_in_list, 0)
+	Else
+		ShellExecute(ReleaseGetDownloadPage($release_in_list))
+	EndIf
 	SendReport("End-GUI_Download_Manually")
 EndFunc   ;==>GUI_Download_Manually
 
@@ -438,8 +466,6 @@ Func DownloadRelease($release_in_list, $automatic_download)
 	;GUICtrlSetCursor($BACK_AREA, 0)
 	;GUICtrlSetOnEvent($BACK_AREA, "GUI_Back_Download")
 
-	_ProgressDelete($progress_bar)
-	Global $_Progress_Bars[1][15] = [[-1]]
 	$progress_bar = _ProgressCreate(38 + $offsetx0, 238 + $offsety0, 300, 30)
 	_ProgressSetImages($progress_bar, @ScriptDir & "\tools\img\progress_green.jpg", @ScriptDir & "\tools\img\progress_background.jpg")
 	_ProgressSetFont($progress_bar, "", -1, -1, 0x000000, 0)
@@ -461,21 +487,38 @@ Func DownloadRelease($release_in_list, $automatic_download)
 		If StringStripWS($mirror, 8) <> "" Then
 			_ProgressSet($progress_bar, $tested_mirrors * 100 / $available_mirrors)
 			_ProgressSetText($progress_bar, Translate("Testing mirror") & " : " & URLToHostname($mirror))
-			;$temp_latency = Ping(URLToHostname($mirror))
 
-			$command="ping-"&$mirror
-			SendReport($command)
+			; Old Method
+			;$temp_latency = Ping(URLToHostname($mirror))
+			;$command="ping-"&$mirror
+			;SendReport($command)
+
 			$tested_mirrors = $tested_mirrors + 1
 			$timeout=TimerInit()
-			While StringInStr($ping_result,$command)<=0 AND TimerDiff($timeout)<12000
-				Sleep(30)
-			Wend
+
+			;While StringInStr($ping_result,$command)<=0 AND TimerDiff($timeout)<12000
+			;	Sleep(30)
+			;Wend
+
+			Local $timer_init,$temp_size=0
+			$timer_init = TimerInit()
+			$temp_size = InetGetSize($mirror,3)
+			$ping_latency=TimerDiff($timer_init)
+			$temp_size = Round($temp_size / 1048576)
+			If $temp_size < 5 Or $temp_size > 5000 Then
+				$temp_latency = 10000
+			Else
+				$temp_latency=Int($ping_latency)
+			EndIf
+
+			#cs Old method
 			if StringInStr($ping_result,$command)<=0 Then
 				$temp_latency = 10000
 			Else
 				$result = StringReplace($ping_result,$command&"=","")
 				$temp_latency=Int($result)
 			Endif
+			#ce
 		Else
 			$temp_latency = 10000
 		EndIf
@@ -718,8 +761,16 @@ EndFunc   ;==>GUI_Persistence_Slider
 Func GUI_Persistence_Input()
 	SendReport("Start-GUI_Persistence_Input")
 	$selected_drive = StringLeft(GUICtrlRead($combo), 2)
-	If StringIsInt(GUICtrlRead($slider_visual)) And GUICtrlRead($slider_visual) <= SpaceAfterLinuxLiveMB($selected_drive) And GUICtrlRead($slider_visual) > 0 Then
+	$space_after_linux_live_MB=SpaceAfterLinuxLiveMB($selected_drive)
+	If StringIsInt(GUICtrlRead($slider_visual)) And GUICtrlRead($slider_visual) <= $space_after_linux_live_MB And GUICtrlRead($slider_visual) > 0 Then
 		GUICtrlSetData($slider, Round(GUICtrlRead($slider_visual) / 10))
+		GUICtrlSetData($slider_visual_mode, Translate("(Persistent Mode)"))
+		; State is  OK (persistent mode)
+		Step3_Check("good")
+
+	ElseIf StringIsInt(GUICtrlRead($slider_visual)) And GUICtrlRead($slider_visual) > $space_after_linux_live_MB And GUICtrlRead($slider_visual) > 0 Then
+		GUICtrlSetData($slider_visual, $space_after_linux_live_MB)
+		GUICtrlSetData($slider, $slider_visual)
 		GUICtrlSetData($slider_visual_mode, Translate("(Persistent Mode)"))
 		; State is  OK (persistent mode)
 		Step3_Check("good")
@@ -751,7 +802,7 @@ Func GUI_Format_Key()
 
 	ElseIf (StringInStr(DriveGetFileSystem($selected_drive), "FAT") <= 0 And GUICtrlRead($formater) <> $GUI_CHECKED) Then
 		MsgBox(4096, "", Translate("Please choose a FAT32 or FAT formated key or check the formating option"))
-		GUICtrlSetData($label_max, "?? Mo")
+		GUICtrlSetData($label_max, "?? "&Translate("MB"))
 		Step1_Check("bad")
 
 	Else
@@ -766,12 +817,50 @@ Func GUI_Format_Key()
 	SendReport("End-GUI_Format_Key")
 EndFunc   ;==>GUI_Format_Key
 
+Func Refresh_Persistence()
+	$space_after_linux_live_MB=SpaceAfterLinuxLiveMB($selected_drive)
+
+	If ((StringInStr(DriveGetFileSystem($selected_drive), "FAT") >= 1 Or GUICtrlRead($formater) == $GUI_CHECKED) And $space_after_linux_live_MB > 0) Then
+		; State is OK ( FAT32 or FAT format and 700MB+ free)
+		GUICtrlSetData($label_max, $space_after_linux_live_MB & " " & Translate("MB"))
+		GUICtrlSetLimit($slider, Round($space_after_linux_live_MB / 10), 0)
+
+	ElseIf (StringInStr(DriveGetFileSystem($selected_drive), "FAT") <= 0 And GUICtrlRead($formater) <> $GUI_CHECKED) Then
+		GUICtrlSetData($label_max, "?? " & Translate("MB"))
+	Else
+		GUICtrlSetData($label_max, "?? " & Translate("MB"))
+	EndIf
+	GUI_Persistence_Slider()
+EndFunc
+
 Func GUI_Check_VirtualBox()
-	GUI_Format_Key()
-EndFunc   ;==>GUI_Format_Key
+	If GUICtrlRead($virtualbox) == $GUI_CHECKED Then
+		WriteSetting("Last_State","virtualization","yes")
+	Else
+		WriteSetting("Last_State","virtualization","no")
+	EndIf
+	Refresh_Persistence()
+EndFunc
+
+Func GUI_Check_HideFiles()
+	If GUICtrlRead($hide_files) == $GUI_CHECKED Then
+		WriteSetting("Last_State","hide_files","yes")
+	Else
+		WriteSetting("Last_State","hide_files","no")
+	EndIf
+EndFunc
 
 Func GUI_Launch_Creation()
 	Local $return=""
+
+	$selected_drive = StringLeft(GUICtrlRead($combo), 2)
+
+	if Not FileExists($selected_drive&"\") Then
+		MsgBox(64,Translate("Please read"),Translate("Please insert your USB key back or select another one")&".")
+		Return ""
+	EndIf
+
+
 	; to avoid to create the key twice in a row
 	if $already_create_a_key >0 Then
 		$return = MsgBox(33,Translate("Please read"),Translate("You have already created a key")&"."&@CRLF&Translate("Are you sure that you want to recreate one")&" ?")
@@ -782,7 +871,7 @@ Func GUI_Launch_Creation()
 	SendReport(LogSystemConfig())
 	; Disable the controls and re-enable after creation
 
-	$selected_drive = StringLeft(GUICtrlRead($combo), 2)
+
 
 	; force cleaning old status (little bug fix)
 	UpdateStatus("")
